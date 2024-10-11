@@ -1,14 +1,15 @@
-#include <gtest/gtest.h>
 #include <gmock/gmock.h>
+#include <gtest/gtest.h>
 
 #include <bytes/bytes.h>
 #include <limits>
 
-#include "dave_test.h"
 #include "dave/common.h"
 #include "dave/cryptor_manager.h"
-#include "dave/test/static_key_ratchet.h"
 #include "dave/utils/clock.h"
+
+#include "dave_test.h"
+#include "static_key_ratchet.h"
 
 using namespace testing;
 using namespace std::chrono_literals;
@@ -62,8 +63,9 @@ TEST_F(DaveTests, CryptorManagerCheckMaxGap)
     EXPECT_EQ(cryptorManager.GetCryptor(0), cryptor);
     EXPECT_NE(cryptorManager.GetCryptor(kMaxGenerationGap), nullptr);
     EXPECT_EQ(cryptorManager.GetCryptor(kMaxGenerationGap + 1), nullptr);
-    cryptorManager.ReportCryptorSuccess(kMaxGenerationGap,
-                                        kMaxGenerationGap << kRatchetGenerationShiftBits);
+    cryptorManager.ReportCryptorSuccess(
+      kMaxGenerationGap,
+      static_cast<TruncatedSyncNonce>(kMaxGenerationGap << kRatchetGenerationShiftBits));
     EXPECT_NE(cryptorManager.GetCryptor(kMaxGenerationGap + 1), nullptr);
 }
 

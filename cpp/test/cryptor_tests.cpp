@@ -3,8 +3,9 @@
 #include "dave/decryptor.h"
 #include "dave/encryptor.h"
 #include "dave/frame_processors.h"
-#include "dave/test/dave_test.h"
-#include "dave/test/static_key_ratchet.h"
+
+#include "dave_test.h"
+#include "static_key_ratchet.h"
 
 using namespace testing;
 using namespace std::chrono_literals;

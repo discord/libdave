@@ -2,9 +2,10 @@
 
 #include <bytes/bytes.h>
 
-#include "dave_test.h"
 #include "dave/boringssl_cryptor.h"
-#include "dave/test/static_key_ratchet.h"
+
+#include "dave_test.h"
+#include "static_key_ratchet.h"
 
 namespace discord {
 namespace dave {
