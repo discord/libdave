@@ -7,7 +7,7 @@
 namespace discord {
 namespace dave {
 
-MlsKeyRatchet::MlsKeyRatchet(::mlspp::CipherSuite suite, bytes baseSecret) noexcept
+MlsKeyRatchet::MlsKeyRatchet(::MLS_NAMESPACE::CipherSuite suite, bytes baseSecret) noexcept
   : hashRatchet_(suite, std::move(baseSecret))
 {
 }

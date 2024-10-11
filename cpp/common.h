@@ -7,10 +7,11 @@
 #include <string>
 #include <variant>
 #include <vector>
+#include <namespace.h>
 
 #include "version.h"
 
-namespace mlspp::bytes_ns {
+namespace MLS_NAMESPACE::bytes_ns {
 struct bytes;
 };
 
@@ -20,7 +21,7 @@ namespace dave {
 using UnencryptedFrameHeaderSize = uint16_t;
 using TruncatedSyncNonce = uint32_t;
 using MagicMarker = uint16_t;
-using EncryptionKey = ::mlspp::bytes_ns::bytes;
+using EncryptionKey = ::MLS_NAMESPACE::bytes_ns::bytes;
 using TransitionId = uint16_t;
 using SupplementalBytesSize = uint8_t;
 
