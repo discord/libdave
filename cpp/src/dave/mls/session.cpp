@@ -347,7 +347,36 @@ try {
         optionalCachedState = *(outboundCachedGroupState_.get());
     }
 
-    auto newState = stateWithProposals_->handle(commitMessage, optionalCachedState);
+    auto validatedMessage = stateWithProposals_->unwrap(commitMessage);
+    const auto& authenticatedContent = validatedMessage.authenticated_content();
+
+    if (authenticatedContent.wire_format != ::mlspp::WireFormat::mls_public_message) {
+        throw std::invalid_argument("Invalid commit wire format");
+    }
+
+    if (authenticatedContent.content.epoch != stateWithProposals_->epoch()) {
+        throw std::invalid_argument("Commit epoch mismatch");
+    }
+
+    if (authenticatedContent.content.content_type() != ::mlspp::ContentType::commit) {
+        throw std::invalid_argument("Unexpected message type");
+    }
+
+    if (authenticatedContent.content.sender.sender_type() != ::mlspp::SenderType::member) {
+        throw std::invalid_argument("Unexpected commit sender type");
+    }
+
+    const auto& commitContent =
+      ::mlspp::tls::var::get<::mlspp::Commit>(authenticatedContent.content.content);
+
+    for (const auto& proposalOrRef : commitContent.proposals) {
+        if (::mlspp::tls::variant<::mlspp::ProposalOrRefType>::type(proposalOrRef.content) !=
+            ::mlspp::ProposalOrRefType::reference) {
+            throw std::invalid_argument("Unexpected non-ref proposal");
+        }
+    }
+
+    auto newState = stateWithProposals_->handle(validatedMessage, optionalCachedState);
 
     if (!newState) {
         DISCORD_LOG(LS_ERROR) << "MLS commit handling did not produce a new state";
@@ -435,12 +464,15 @@ RosterMap Session::ReplaceState(std::unique_ptr<::mlspp::State>&& state)
     RosterMap newRoster;
     for (const ::mlspp::LeafNode& node : state->roster()) {
         if (node.credential.type() != ::mlspp::CredentialType::basic) {
-            continue;
+            throw std::invalid_argument("Unexpected credential type in roster");
         }
 
         const auto& cred = node.credential.template get<::mlspp::BasicCredential>();
 
-        newRoster[FromBigEndianBytes(cred.identity)] = node.signature_key.data.as_vec();
+        if (newRoster.emplace(FromBigEndianBytes(cred.identity), node.signature_key.data.as_vec())
+              .second != true) {
+            throw std::invalid_argument("Duplicate identity in roster");
+        }
     }
 
     RosterMap changeMap;
