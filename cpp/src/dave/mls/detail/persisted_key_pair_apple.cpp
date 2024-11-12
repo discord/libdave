@@ -22,10 +22,16 @@ static const CFStringRef KeyServiceLabel = CFSTR("Discord Secure Frames Key");
 static const std::string KeyLabelPrefix = "Discord Secure Frames Key: ";
 static const std::string KeyTagPrefix = "discord-secure-frames-key-";
 
+#ifdef KEYCHAIN_ACCESS_GROUP_ID_SYMBOL
+extern CFStringRef KEYCHAIN_ACCESS_GROUP_ID_SYMBOL;
+#endif
+
 static void AddAccessGroup([[maybe_unused]] CFMutableDictionaryRef dict)
 {
-#if TARGET_OS_IPHONE
-    CFDictionaryAddValue(dict, kSecAttrAccessGroup, CFSTR("group.com.hammerandchisel.discord"));
+#ifdef KEYCHAIN_ACCESS_GROUP_ID_SYMBOL
+    CFDictionaryAddValue(dict, kSecAttrAccessGroup, KEYCHAIN_ACCESS_GROUP_ID_SYMBOL);
+#elif defined(KEYCHAIN_ACCESS_GROUP_ID)
+    CFDictionaryAddValue(dict, kSecAttrAccessGroup, CFSTR(#KEYCHAIN_ACCESS_GROUP_ID));
 #endif
 }
 
