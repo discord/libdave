@@ -1,6 +1,6 @@
 {
   "name": "mlspp",
-  "version-string": "49f1c412691e2dc394e24322a84e95ddabf4bf4b",
+  "version-string": "1cc50a124a3bc4e143a787ec934280dc70c1034d",
   "description": "Cisco MLS C++ library",
   "dependencies": [
     {
@@ -12,3 +12,4 @@
   ],
   "builtin-baseline": "eb33d2f7583405fca184bcdf7fdd5828ec88ac05"
 }
+

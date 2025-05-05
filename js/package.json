@@ -1,12 +1,21 @@
 {
   "name": "@discordapp/libdave",
+  "description": "Discord's DAVE library for end-to-end encryption",
   "license": "MIT",
   "version": "1.0.0",
-  "main": "libdave.tsx",
+  "main": "index.ts",
+  "files": [
+    "DisplayableCode.ts",
+    "index.ts",
+    "KeyFingerprint.ts",
+    "KeySerialization.ts",
+    "PairwiseFingerprint.ts"
+  ],
   "scripts": {
     "test": "jest",
     "build:watch": "tsc --watch",
-    "build": "tsc"
+    "build": "tsc",
+    "clean": "rm -rf dist"
   },
   "devDependencies": {
     "@jest/globals": "^29.7.0",
@@ -17,5 +26,6 @@
   "dependencies": {
     "@noble/hashes": "1.5.0",
     "base64-js": "1.5.1"
-  }
+  },
+  "bundledDependencies": true
 }
