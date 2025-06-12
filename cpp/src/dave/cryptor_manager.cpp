@@ -96,15 +96,15 @@ void CryptorManager::ReportCryptorSuccess(KeyGeneration generation, TruncatedSyn
         newestProcessedNonce_ = bigNonce;
     }
     else if (bigNonce > *newestProcessedNonce_) {
-        auto oldestMissingNonce = bigNonce > kMaxMissingNonces ? bigNonce - kMaxMissingNonces : 0;
+        auto missingNonces =
+          std::min(bigNonce - *newestProcessedNonce_ - 1, static_cast<uint64_t>(kMaxMissingNonces));
 
-        while (!missingNonces_.empty() && missingNonces_.front() < oldestMissingNonce) {
+        while (!missingNonces_.empty() &&
+               missingNonces_.size() + missingNonces > kMaxMissingNonces) {
             missingNonces_.pop_front();
         }
 
-        // If we're missing a lot, we don't want to add everything since newestProcessedNonce_
-        auto missingRangeStart = std::max(oldestMissingNonce, *newestProcessedNonce_ + 1);
-        for (auto i = missingRangeStart; i < bigNonce; ++i) {
+        for (auto i = bigNonce - missingNonces; i < bigNonce; ++i) {
             missingNonces_.push_back(i);
         }
 
