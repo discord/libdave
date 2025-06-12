@@ -59,7 +59,7 @@ uint8_t SerializeUnencryptedRanges(const Ranges& unencryptedRanges,
         writeAt += WriteLeb128(range.size, writeAt);
     }
 
-    assert(writeAt <= buffer);
+    assert(writeAt >= buffer);
     return static_cast<uint8_t>(writeAt - buffer);
 }
 
