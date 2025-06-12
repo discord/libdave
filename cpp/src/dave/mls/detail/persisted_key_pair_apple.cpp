@@ -265,6 +265,21 @@ std::shared_ptr<::mlspp::SignaturePrivateKey> GetNativePersistedKeyPair(
 
         OSStatus status = SecItemCopyMatching(query, key.getGenericPtr());
 
+        if (status == errSecSuccess) {
+            ScopedCFTypeRef updateQuery = CFDictionaryCreateMutableCopy(NULL, 0, query);
+            ScopedCFTypeRef updateAttrs = CFDictionaryCreateMutable(
+              NULL, 0, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+
+            CFDictionaryRemoveValue(updateQuery, kSecReturnRef);
+            CFDictionaryAddValue(
+              updateAttrs, kSecAttrAccessible, kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly);
+
+            // Best effort
+            OSStatus updateStatus = SecItemUpdate(query, updateAttrs);
+            DISCORD_LOG(LS_INFO) << "Attempted to update permissions on existing key: "
+                                 << SecStatusToString(updateStatus);
+        }
+
         if (status == errSecItemNotFound) {
             DISCORD_LOG(LS_INFO) << "Item not found in GetPersistedKeyPair; generating new: "
                                  << SecStatusToString(status);
@@ -278,6 +293,8 @@ std::shared_ptr<::mlspp::SignaturePrivateKey> GetNativePersistedKeyPair(
             CFDictionaryAddValue(params, kSecAttrCanDecrypt, kCFBooleanFalse);
             CFDictionaryAddValue(params, kSecAttrCanWrap, kCFBooleanFalse);
             CFDictionaryAddValue(params, kSecAttrCanUnwrap, kCFBooleanFalse);
+            CFDictionaryAddValue(
+              params, kSecAttrAccessible, kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly);
             if (__builtin_available(macOS 10.15, *)) {
                 CFDictionaryAddValue(params, kSecUseDataProtectionKeychain, useDataProtection);
             }
