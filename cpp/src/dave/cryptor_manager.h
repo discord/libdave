@@ -28,7 +28,7 @@ public:
     bool IsExpired() const { return clock_.Now() > ratchetExpiry_; }
 
     bool CanProcessNonce(KeyGeneration generation, TruncatedSyncNonce nonce) const;
-    KeyGeneration ComputeWrappedGeneration(KeyGeneration generation);
+    KeyGeneration ComputeWrappedGeneration(KeyGeneration generation) const;
 
     ICryptor* GetCryptor(KeyGeneration generation);
     void ReportCryptorSuccess(KeyGeneration generation, TruncatedSyncNonce nonce);

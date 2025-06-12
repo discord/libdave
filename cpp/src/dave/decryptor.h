@@ -26,6 +26,8 @@ struct DecryptorStats {
     uint64_t decryptFailureCount = 0;
     uint64_t decryptDuration = 0;
     uint64_t decryptAttempts = 0;
+    uint64_t decryptMissingKeyCount = 0;
+    uint64_t decryptInvalidNonceCount = 0;
 };
 
 class Decryptor {
@@ -47,10 +49,17 @@ public:
 private:
     using TimePoint = IClock::TimePoint;
 
-    bool DecryptImpl(CryptorManager& cryptor,
-                     MediaType mediaType,
-                     InboundFrameProcessor& encryptedFrame,
-                     ArrayView<uint8_t> frame);
+    enum ResultCode {
+        Success,
+        MissingKeyRatchet,
+        InvalidNonce,
+        MissingCryptor,
+        DecryptionFailure,
+    };
+
+    ResultCode DecryptImpl(CryptorManager& cryptor,
+                           MediaType mediaType,
+                           InboundFrameProcessor& encryptedFrame);
 
     void UpdateCryptorManagerExpiry(Duration expiry);
     void CleanupExpiredCryptorManagers();

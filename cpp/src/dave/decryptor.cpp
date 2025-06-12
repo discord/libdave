@@ -51,6 +51,7 @@ size_t Decryptor::Decrypt(MediaType mediaType,
                                 << static_cast<int>(mediaType);
         return 0;
     }
+    auto& stats = stats_[mediaType];
 
     auto start = clock_.Now();
 
@@ -95,28 +96,35 @@ size_t Decryptor::Decrypt(MediaType mediaType,
 
     // Try and decrypt with each valid cryptor
     // reverse iterate to try the newest cryptors first
-    bool success = false;
+    auto result = ResultCode::MissingKeyRatchet;
     for (auto it = cryptorManagers_.rbegin(); it != cryptorManagers_.rend(); ++it) {
         auto& cryptorManager = *it;
-        success = DecryptImpl(cryptorManager, mediaType, *localFrame, frame);
-        if (success) {
+        result = DecryptImpl(cryptorManager, mediaType, *localFrame);
+        if (result == ResultCode::Success) {
             break;
         }
     }
 
     size_t bytesWritten = 0;
-    if (success) {
-        stats_[mediaType].decryptSuccessCount++;
+    if (result == ResultCode::Success) {
+        stats.decryptSuccessCount++;
         bytesWritten = localFrame->ReconstructFrame(frame);
     }
     else {
-        stats_[mediaType].decryptFailureCount++;
+        stats.decryptFailureCount++;
         DISCORD_LOG(LS_WARNING) << "Decrypt failed, no valid cryptor found, type: "
                                 << (mediaType ? "video" : "audio")
                                 << ", encrypted frame size: " << encryptedFrame.size()
                                 << ", plaintext frame size: " << frame.size()
                                 << ", number of cryptor managers: " << cryptorManagers_.size()
                                 << ", pass through enabled: " << (canUsePassThrough ? "yes" : "no");
+
+        if (result == ResultCode::InvalidNonce) {
+            stats.decryptInvalidNonceCount++;
+        }
+        else if (result == ResultCode::MissingKeyRatchet) {
+            stats.decryptMissingKeyCount++;
+        }
     }
 
     auto end = clock_.Now();
@@ -127,16 +135,15 @@ size_t Decryptor::Decrypt(MediaType mediaType,
                              << ". Failed audio: " << stats_[Audio].decryptFailureCount
                              << ", video: " << stats_[Video].decryptFailureCount;
     }
-    stats_[mediaType].decryptDuration +=
+    stats.decryptDuration +=
       std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
 
     return bytesWritten;
 }
 
-bool Decryptor::DecryptImpl(CryptorManager& cryptorManager,
-                            MediaType mediaType,
-                            InboundFrameProcessor& encryptedFrame,
-                            [[maybe_unused]] ArrayView<uint8_t> frame)
+Decryptor::ResultCode Decryptor::DecryptImpl(CryptorManager& cryptorManager,
+                                             MediaType mediaType,
+                                             InboundFrameProcessor& encryptedFrame)
 {
     auto tag = encryptedFrame.GetTag();
     auto truncatedNonce = encryptedFrame.GetTruncatedNonce();
@@ -158,7 +165,7 @@ bool Decryptor::DecryptImpl(CryptorManager& cryptorManager,
 
     if (!cryptorManager.CanProcessNonce(generation, truncatedNonce)) {
         DISCORD_LOG(LS_INFO) << "Decrypt failed, cannot process nonce: " << truncatedNonce;
-        return false;
+        return ResultCode::InvalidNonce;
     }
 
     // Get the cryptor for this generation
@@ -166,7 +173,7 @@ bool Decryptor::DecryptImpl(CryptorManager& cryptorManager,
 
     if (!cryptor) {
         DISCORD_LOG(LS_INFO) << "Decrypt failed, no cryptor found for generation: " << generation;
-        return false;
+        return ResultCode::MissingCryptor;
     }
 
     // perform the decryption
@@ -177,7 +184,7 @@ bool Decryptor::DecryptImpl(CryptorManager& cryptorManager,
         cryptorManager.ReportCryptorSuccess(generation, truncatedNonce);
     }
 
-    return success;
+    return success ? ResultCode::Success : ResultCode::DecryptionFailure;
 }
 
 size_t Decryptor::GetMaxPlaintextByteSize([[maybe_unused]] MediaType mediaType,

@@ -25,6 +25,7 @@ struct EncryptorStats {
     uint64_t encryptDuration = 0;
     uint64_t encryptAttempts = 0;
     uint64_t encryptMaxAttempts = 0;
+    uint64_t encryptMissingKeyCount = 0;
 };
 
 class Encryptor {

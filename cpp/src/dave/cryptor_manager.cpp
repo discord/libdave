@@ -134,7 +134,7 @@ void CryptorManager::ReportCryptorSuccess(KeyGeneration generation, TruncatedSyn
     }
 }
 
-KeyGeneration CryptorManager::ComputeWrappedGeneration(KeyGeneration generation)
+KeyGeneration CryptorManager::ComputeWrappedGeneration(KeyGeneration generation) const
 {
     return ::discord::dave::ComputeWrappedGeneration(oldestGeneration_, generation);
 }

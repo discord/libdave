@@ -47,19 +47,21 @@ int Encryptor::Encrypt(MediaType mediaType,
                                 << static_cast<int>(mediaType);
         return 0;
     }
+    auto& stats = stats_[mediaType];
 
     if (passthroughMode_) {
         // Pass frame through without encrypting
         memcpy(encryptedFrame.data(), frame.data(), frame.size());
         *bytesWritten = frame.size();
-        stats_[mediaType].passthroughCount++;
+        stats.passthroughCount++;
         return ResultCode::Success;
     }
 
     {
         std::lock_guard<std::mutex> lock(keyGenMutex_);
         if (!keyRatchet_) {
-            stats_[mediaType].encryptFailureCount++;
+            stats.encryptFailureCount++;
+            stats.encryptMissingKeyCount++;
             return ResultCode::EncryptionFailure;
         }
     }
@@ -108,6 +110,7 @@ int Encryptor::Encrypt(MediaType mediaType,
         auto [cryptor, truncatedNonce] = GetNextCryptorAndNonce();
 
         if (!cryptor) {
+            stats.encryptMissingKeyCount++;
             result = ResultCode::EncryptionFailure;
             break;
         }
@@ -122,9 +125,8 @@ int Encryptor::Encrypt(MediaType mediaType,
         bool success = cryptor->Encrypt(
           ciphertextBuffer, plaintextBuffer, nonceBufferView, additionalData, tagBuffer);
 
-        stats_[mediaType].encryptAttempts++;
-        stats_[mediaType].encryptMaxAttempts =
-          std::max(stats_[mediaType].encryptMaxAttempts, (uint64_t)attempt);
+        stats.encryptAttempts++;
+        stats.encryptMaxAttempts = std::max(stats.encryptMaxAttempts, (uint64_t)attempt);
 
         if (!success) {
             assert(false && "Failed to encrypt frame");
@@ -193,13 +195,13 @@ int Encryptor::Encrypt(MediaType mediaType,
     }
 
     auto now = std::chrono::steady_clock::now();
-    stats_[mediaType].encryptDuration +=
+    stats.encryptDuration +=
       std::chrono::duration_cast<std::chrono::microseconds>(now - start).count();
     if (result == ResultCode::Success) {
-        stats_[mediaType].encryptSuccessCount++;
+        stats.encryptSuccessCount++;
     }
     else {
-        stats_[mediaType].encryptFailureCount++;
+        stats.encryptFailureCount++;
     }
 
     if (now > lastStatsTime_ + kStatsInterval) {
