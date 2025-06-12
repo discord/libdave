@@ -51,8 +51,9 @@ int Encryptor::Encrypt(MediaType mediaType,
 
     if (passthroughMode_) {
         // Pass frame through without encrypting
-        memcpy(encryptedFrame.data(), frame.data(), frame.size());
-        *bytesWritten = frame.size();
+        auto copySize = std::min(encryptedFrame.size(), frame.size());
+        memcpy(encryptedFrame.data(), frame.data(), copySize);
+        *bytesWritten = copySize;
         stats.passthroughCount++;
         return ResultCode::Success;
     }

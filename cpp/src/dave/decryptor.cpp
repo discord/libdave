@@ -62,10 +62,11 @@ size_t Decryptor::Decrypt(MediaType mediaType,
     if (mediaType == Audio && encryptedFrame.size() == kOpusSilencePacket.size() &&
         memcmp(encryptedFrame.data(), kOpusSilencePacket.data(), kOpusSilencePacket.size()) == 0) {
         DISCORD_LOG(LS_VERBOSE) << "Decrypt skipping silence of size: " << encryptedFrame.size();
+        auto copySize = std::min(frame.size(), encryptedFrame.size());
         if (encryptedFrame.data() != frame.data()) {
-            memcpy(frame.data(), encryptedFrame.data(), encryptedFrame.size());
+            memcpy(frame.data(), encryptedFrame.data(), copySize);
         }
-        return encryptedFrame.size();
+        return copySize;
     }
 
     // Remove any expired cryptor manager
@@ -79,11 +80,12 @@ size_t Decryptor::Decrypt(MediaType mediaType,
     // If the frame is not encrypted and we can pass it through, do it
     bool canUsePassThrough = allowPassThroughUntil_ > start;
     if (!localFrame->IsEncrypted() && canUsePassThrough) {
+        auto copySize = std::min(frame.size(), encryptedFrame.size());
         if (encryptedFrame.data() != frame.data()) {
-            memcpy(frame.data(), encryptedFrame.data(), encryptedFrame.size());
+            memcpy(frame.data(), encryptedFrame.data(), copySize);
         }
         stats_[mediaType].passthroughCount++;
-        return encryptedFrame.size();
+        return copySize;
     }
 
     // If the frame is not encrypted and we can't pass it through, fail

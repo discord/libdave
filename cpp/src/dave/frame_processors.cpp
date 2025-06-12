@@ -131,6 +131,9 @@ size_t Reconstruct(Ranges ranges,
     const auto CopyRangeBytes = [&](size_t size) {
         assert(rangeBytesIndex + size <= rangeBytes.size());
         assert(frameIndex + size <= output.size());
+        if ((rangeBytes.size() - rangeBytesIndex < size) || (output.size() - frameIndex < size)) {
+            return;
+        }
         memcpy(output.data() + frameIndex, rangeBytes.data() + rangeBytesIndex, size);
         rangeBytesIndex += size;
         frameIndex += size;
@@ -139,6 +142,9 @@ size_t Reconstruct(Ranges ranges,
     const auto CopyOtherBytes = [&](size_t size) {
         assert(otherBytesIndex + size <= otherBytes.size());
         assert(frameIndex + size <= output.size());
+        if ((otherBytes.size() - otherBytesIndex < size) || (output.size() - frameIndex < size)) {
+            return;
+        }
         memcpy(output.data() + frameIndex, otherBytes.data() + otherBytesIndex, size);
         otherBytesIndex += size;
         frameIndex += size;
