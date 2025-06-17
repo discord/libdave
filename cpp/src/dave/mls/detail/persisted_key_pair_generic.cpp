@@ -12,6 +12,7 @@
 #include <io.h>
 #else
 #include <unistd.h>
+#include <sys/stat.h>
 #endif
 #include <fcntl.h>
 
