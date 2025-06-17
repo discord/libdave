@@ -27,6 +27,12 @@ runs:
         restore-keys: |
           v01-vcpkg-${{ inputs.runner }}-${{ inputs.crypto }}
 
+    - name: vcpkg bootstrap
+      if: ${{ runner.os == 'macOS' }} || ${{ runner.os == 'Linux' }}
+      shell: bash
+      run: |
+        ./cpp/vcpkg/bootstrap-vcpkg.sh
+
     - name: Install dependencies (macOS)
       if: ${{ runner.os == 'macOS' }}
       shell: bash

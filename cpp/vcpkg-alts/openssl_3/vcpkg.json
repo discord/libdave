@@ -1,0 +1,24 @@
+{
+  "name": "libdave",
+  "license": "MIT",
+  "dependencies": [
+    {
+      "name": "openssl",
+      "version>=": "3.0.7"
+    },
+    "gtest",
+    "mlspp"
+  ],
+  "builtin-baseline": "d07689ef165f033de5c0710e4f67c193a85373e1",
+  "vcpkg-configuration": {
+    "overlay-ports": [
+      "./overlay-ports"
+    ]
+  },
+  "overrides": [
+    {
+      "name": "openssl",
+      "version": "3.0.7"
+    }
+  ]
+}

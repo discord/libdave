@@ -1,0 +1,21 @@
+{
+    "name": "mlspp",
+    "version-string": "1cc50a124a3bc4e143a787ec934280dc70c1034d",
+    "description": "Cisco MLS C++ library",
+    "dependencies": [
+      {
+        "name": "openssl",
+        "version>=": "3.0.7"
+      },
+      "catch2",
+      "nlohmann-json",
+      "vcpkg-cmake"
+    ],
+    "builtin-baseline": "eb33d2f7583405fca184bcdf7fdd5828ec88ac05",
+    "overrides": [
+      {
+        "name": "openssl",
+        "version": "3.0.7"
+      }
+    ]
+  }

@@ -6,11 +6,12 @@ project(
   LANGUAGES CXX
 )
 
-option(REQUIRE_BORINGSSL "Require BoringSSL instead of OpenSSL" ON)
+option(REQUIRE_BORINGSSL "Require BoringSSL instead of OpenSSL" OFF)
 option(TESTING "Build tests" OFF)
 option(PERSISTENT_KEYS "Enable storage of persistent signature keys" OFF)
 
 include(CheckCXXCompilerFlag)
+include(CMakeFindDependencyMacro)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -50,7 +51,7 @@ if (OPENSSL_FOUND)
   endif ()
 
   if (${OPENSSL_VERSION} VERSION_GREATER_EQUAL 3)
-    message(FATAL_ERROR "OpenSSL 3.x is not supported")
+    add_compile_definitions(WITH_OPENSSL3)
   elseif(${OPENSSL_VERSION} VERSION_LESS 1.1.1)
     message(FATAL_ERROR "OpenSSL 1.1.1 or greater is required")
   endif()
@@ -62,7 +63,8 @@ else()
   message(FATAL_ERROR "No OpenSSL library found")
 endif()
 
-find_package(MLSPP CONFIG REQUIRED)
+find_package(nlohmann_json REQUIRED)
+find_dependency(MLSPP REQUIRED)
 
 set(CMAKE_STATIC_LIBRARY_PREFIX "")
 
@@ -105,6 +107,12 @@ endif ()
 if (NOT APPLE)
   list(FILTER LIB_SOURCES EXCLUDE REGEX ".*_apple.cpp")
 endif ()
+
+if (BORINGSSL_INCLUDE_DIR)
+  list(FILTER LIB_SOURCES EXCLUDE REGEX ".*openssl_cryptor.*")
+else ()
+  list(FILTER LIB_SOURCES EXCLUDE REGEX ".*boringssl_cryptor.*")
+endif()
 
 add_library(${LIB_NAME} ${LIB_HEADERS} ${LIB_SOURCES})
 

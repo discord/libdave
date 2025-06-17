@@ -2,7 +2,11 @@
 
 #include <bytes/bytes.h>
 
+#ifdef WITH_BORINGSSL
 #include "dave/boringssl_cryptor.h"
+#else
+#include "dave/openssl_cryptor.h"
+#endif
 
 #include "dave_test.h"
 #include "static_key_ratchet.h"
@@ -11,7 +15,13 @@ namespace discord {
 namespace dave {
 namespace test {
 
-TEST_F(DaveTests, BoringSSLEncryptDecrypt)
+#ifdef WITH_BORINGSSL
+using CryptorVariant = BoringSSLCryptor;
+#else
+using CryptorVariant = OpenSSLCryptor;
+#endif
+
+TEST_F(DaveTests, XSSLEncryptDecrypt)
 {
     constexpr size_t PLAINTEXT_SIZE = 1024;
     auto plaintextBufferIn = std::vector<uint8_t>(PLAINTEXT_SIZE, 0);
@@ -34,7 +44,7 @@ TEST_F(DaveTests, BoringSSLEncryptDecrypt)
     auto tagOut = MakeArrayView<uint8_t>(tagBuffer.data(), tagBuffer.size());
     auto tagIn = MakeArrayView<const uint8_t>(tagBuffer.data(), tagBuffer.size());
 
-    BoringSSLCryptor cryptor(MakeStaticSenderKey("12345678901234567890"));
+    CryptorVariant cryptor(MakeStaticSenderKey("12345678901234567890"));
 
     EXPECT_TRUE(cryptor.Encrypt(ciphertextOut, plaintextIn, nonce, additionalData, tagOut));
 
@@ -47,7 +57,7 @@ TEST_F(DaveTests, BoringSSLEncryptDecrypt)
     EXPECT_TRUE(memcmp(plaintextBufferIn.data(), plaintextBufferOut.data(), PLAINTEXT_SIZE) == 0);
 }
 
-TEST_F(DaveTests, BoringSSLAdditionalDataAuth)
+TEST_F(DaveTests, XSSLAdditionalDataAuth)
 {
     constexpr size_t PLAINTEXT_SIZE = 1024;
     auto plaintextBufferIn = std::vector<uint8_t>(PLAINTEXT_SIZE, 0);
@@ -70,7 +80,7 @@ TEST_F(DaveTests, BoringSSLAdditionalDataAuth)
     auto tagOut = MakeArrayView<uint8_t>(tagBuffer.data(), tagBuffer.size());
     auto tagIn = MakeArrayView<const uint8_t>(tagBuffer.data(), tagBuffer.size());
 
-    BoringSSLCryptor cryptor(MakeStaticSenderKey("12345678901234567890"));
+    CryptorVariant cryptor(MakeStaticSenderKey("12345678901234567890"));
 
     EXPECT_TRUE(cryptor.Encrypt(ciphertextOut, plaintextIn, nonce, additionalData, tagOut));
 
@@ -80,7 +90,7 @@ TEST_F(DaveTests, BoringSSLAdditionalDataAuth)
     EXPECT_FALSE(cryptor.Decrypt(plaintextOut, ciphertextIn, tagIn, nonce, additionalData));
 }
 
-TEST_F(DaveTests, BoringSSLKeyDiff)
+TEST_F(DaveTests, XSSLKeyDiff)
 {
     constexpr size_t PLAINTEXT_SIZE = 1024;
     auto plaintextBuffer1 = std::vector<uint8_t>(PLAINTEXT_SIZE, 0);
@@ -105,8 +115,8 @@ TEST_F(DaveTests, BoringSSLKeyDiff)
     auto nonce = MakeArrayView<const uint8_t>(nonceBuffer.data(), nonceBuffer.size());
     auto tag = MakeArrayView<uint8_t>(tagBuffer.data(), tagBuffer.size());
 
-    BoringSSLCryptor cryptor1(MakeStaticSenderKey("12345678901234567890"));
-    BoringSSLCryptor cryptor2(MakeStaticSenderKey("09876543210987654321"));
+    CryptorVariant cryptor1(MakeStaticSenderKey("12345678901234567890"));
+    CryptorVariant cryptor2(MakeStaticSenderKey("09876543210987654321"));
 
     EXPECT_TRUE(cryptor1.Encrypt(ciphertext1, plaintext1, nonce, additionalData1, tag));
     EXPECT_TRUE(cryptor2.Encrypt(ciphertext2, plaintext2, nonce, additionalData2, tag));
@@ -114,7 +124,7 @@ TEST_F(DaveTests, BoringSSLKeyDiff)
     EXPECT_FALSE(memcmp(ciphertextBuffer1.data(), ciphertextBuffer2.data(), PLAINTEXT_SIZE) == 0);
 }
 
-TEST_F(DaveTests, BoringSSLNonceDiff)
+TEST_F(DaveTests, XSSLNonceDiff)
 {
     constexpr size_t PLAINTEXT_SIZE = 1024;
     auto plaintextBuffer1 = std::vector<uint8_t>(PLAINTEXT_SIZE, 0);
@@ -141,7 +151,7 @@ TEST_F(DaveTests, BoringSSLNonceDiff)
     auto nonce2 = MakeArrayView<const uint8_t>(nonceBuffer2.data(), nonceBuffer2.size());
     auto tag = MakeArrayView<uint8_t>(tagBuffer.data(), tagBuffer.size());
 
-    BoringSSLCryptor cryptor(MakeStaticSenderKey("12345678901234567890"));
+    CryptorVariant cryptor(MakeStaticSenderKey("12345678901234567890"));
 
     EXPECT_TRUE(cryptor.Encrypt(ciphertext1, plaintext1, nonce1, additionalData1, tag));
     EXPECT_TRUE(cryptor.Encrypt(ciphertext2, plaintext2, nonce2, additionalData2, tag));
