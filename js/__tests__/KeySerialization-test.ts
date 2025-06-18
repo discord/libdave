@@ -1,5 +1,5 @@
 import {describe, expect, test} from '@jest/globals';
-import { serializeKey } from '../KeySerialization';
+import {serializeKey} from '../src/KeySerialization';
 
 describe('KeySerialization', () => {
   test('expectedOutput', async () => {

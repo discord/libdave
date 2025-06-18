@@ -108,13 +108,31 @@ if (NOT APPLE)
   list(FILTER LIB_SOURCES EXCLUDE REGEX ".*_apple.cpp")
 endif ()
 
+if (NOT DEFINED EMSCRIPTEN)
+  list(FILTER LIB_SOURCES EXCLUDE REGEX ".*_wasm.cpp")
+endif()
+
 if (BORINGSSL_INCLUDE_DIR)
   list(FILTER LIB_SOURCES EXCLUDE REGEX ".*openssl_cryptor.*")
 else ()
   list(FILTER LIB_SOURCES EXCLUDE REGEX ".*boringssl_cryptor.*")
 endif()
 
-add_library(${LIB_NAME} ${LIB_HEADERS} ${LIB_SOURCES})
+if (DEFINED EMSCRIPTEN)
+  add_executable(${LIB_NAME} ${LIB_HEADERS} ${LIB_SOURCES})
+
+  set(OPTIMIZATION "-O3")
+  set(CONFIG "-sWASM=1 -sWASM_BIGINT -sENVIRONMENT=web -sMODULARIZE -sALLOW_MEMORY_GROWTH")
+  set(EXPORTS "-sEXPORT_ES6=1 -sEXPORT_NAME=DaveModuleFactory -sEXPORTED_RUNTIME_METHODS='[\"ccall\"]' -sEXPORTED_FUNCTIONS='[\"_malloc\", \"_free\"]'")
+
+  set(COMPILE_FLAGS "${OPTIMIZATION}")
+  set(LINK_FLAGS "${OPTIMIZATION} ${CONFIG} ${EXPORTS} -lembind --no-entry --whole-archive --emit-tsd libdave.d.ts")
+
+  set_target_properties(${LIB_NAME} PROPERTIES COMPILE_FLAGS "${COMPILE_FLAGS}")
+  set_target_properties(${LIB_NAME} PROPERTIES LINK_FLAGS    "${LINK_FLAGS}")
+else()
+  add_library(${LIB_NAME} ${LIB_HEADERS} ${LIB_SOURCES})
+endif()
 
 target_include_directories(
   ${LIB_NAME}

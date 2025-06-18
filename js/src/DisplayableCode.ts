@@ -21,8 +21,7 @@ export function generateDisplayableCode(data: Uint8Array, desiredLength: number,
     let groupValue = BigInt(0);
 
     for (let j = groupSize; j > 0; --j) {
-
-      const nextByte = data[i + (groupSize - j)]
+      const nextByte = data[i + (groupSize - j)];
       if (nextByte === undefined) {
         throw new Error('Out of bounds access from data array');
       }

@@ -1,5 +1,5 @@
 import {describe, expect, test} from '@jest/globals';
-import { generateDisplayableCode } from '../DisplayableCode';
+import {generateDisplayableCode} from '../src/DisplayableCode';
 
 describe('DisplayableCode', () => {
   test('expectedOutput', () => {

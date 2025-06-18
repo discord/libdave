@@ -4,7 +4,9 @@ CLANG_FORMAT=clang-format -i -style=file:.clang-format
 BORINGSSL_MANIFEST=vcpkg-alts/boringssl
 OPENSSL_1_1_MANIFEST=vcpkg-alts/openssl_1.1
 OPENSSL_3_MANIFEST=vcpkg-alts/openssl_3
+WASM_MANIFEST=vcpkg-alts/wasm
 TOOLCHAIN_FILE=vcpkg/scripts/buildsystems/vcpkg.cmake
+EMSCRIPTEN_TOOLCHAIN_FILE=${EMSDK}/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake
 
 all: ${BUILD_DIR}
 	cmake --build ${BUILD_DIR} --target libdave
@@ -31,6 +33,22 @@ devC: ${TOOLCHAIN_FILE}
 		-DREQUIRE_BORINGSSL=ON \
 		-DVCPKG_MANIFEST_DIR=${BORINGSSL_MANIFEST} \
 		-DCMAKE_TOOLCHAIN_FILE=${TOOLCHAIN_FILE}
+
+wasm: check-emsdk
+	emcmake cmake -B${BUILD_DIR} -DCMAKE_BUILD_TYPE=Release \
+		-DVCPKG_MANIFEST_DIR=${WASM_MANIFEST} \
+		-DCMAKE_TOOLCHAIN_FILE=${TOOLCHAIN_FILE} \
+		-DVCPKG_CHAINLOAD_TOOLCHAIN_FILE=${EMSCRIPTEN_TOOLCHAIN_FILE} \
+		-DVCPKG_TARGET_TRIPLET=wasm32-emscripten
+	cmake --build ${BUILD_DIR} --target libdave
+
+check-emsdk:
+	@if [ -z "$$EMSDK" ]; then \
+		echo "Error: EMSDK environment variable is not set"; \
+		echo "Please set it to your emsdk installation directory"; \
+		echo "Example: export EMSDK=/path/to/emsdk"; \
+		exit 1; \
+	fi
 
 test: dev test/*
 	cmake --build ${BUILD_DIR} --target libdave_test

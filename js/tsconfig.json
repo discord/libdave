@@ -11,9 +11,13 @@
     "noUncheckedIndexedAccess": true,
     "noImplicitOverride": true,
     "module": "NodeNext",
+    "moduleResolution": "NodeNext",
     "outDir": "dist",
     "sourceMap": true,
     "declaration": true,
-    "lib": ["es2022", "dom", "dom.iterable"],
-  }
+    "declarationMap": true,
+    "lib": ["es2022", "dom", "dom.iterable"]
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist", "__tests__/**/*"]
 }

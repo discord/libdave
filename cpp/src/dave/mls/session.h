@@ -1,16 +1,14 @@
 #pragma once
 
-#include <deque>
 #include <functional>
 #include <list>
-#include <map>
 #include <memory>
 #include <optional>
 #include <set>
 #include <string>
 #include <vector>
 
-#include "dave/key_ratchet.h"
+#include "dave/mls_key_ratchet.h"
 #include "dave/mls/persisted_key_pair.h"
 #include "dave/version.h"
 
@@ -67,7 +65,7 @@ public:
 
     std::vector<uint8_t> GetMarshalledKeyPackage() noexcept;
 
-    std::unique_ptr<IKeyRatchet> GetKeyRatchet(std::string const& userId) const noexcept;
+    std::unique_ptr<MlsKeyRatchet> GetKeyRatchet(std::string const& userId) const noexcept;
 
     using PairwiseFingerprintCallback = std::function<void(std::vector<uint8_t> const&)>;
 

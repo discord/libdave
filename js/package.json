@@ -2,20 +2,34 @@
   "name": "@discordapp/libdave",
   "description": "Discord's DAVE library for end-to-end encryption",
   "license": "MIT",
-  "version": "1.0.0",
-  "main": "index.ts",
+  "version": "1.0.1",
+  "private": true,
+  "main": "src/index.ts",
+  "exports": {
+    ".": {
+      "import": "./src/index.ts"
+    },
+    "./wasm": {
+      "import": "./src/wasm.ts"
+    }
+  },
   "files": [
-    "DisplayableCode.ts",
-    "index.ts",
-    "KeyFingerprint.ts",
-    "KeySerialization.ts",
-    "PairwiseFingerprint.ts"
+    "src/DisplayableCode.ts",
+    "src/index.ts",
+    "src/KeyFingerprint.ts",
+    "src/KeySerialization.ts",
+    "src/PairwiseFingerprint.ts",
+    "src/wasm.ts",
+    "wasm/libdave.js",
+    "wasm/libdave.d.ts",
+    "wasm/libdave.wasm"
   ],
   "scripts": {
     "test": "jest",
     "build:watch": "tsc --watch",
     "build": "tsc",
-    "clean": "rm -rf dist"
+    "clean": "rm -rf dist",
+    "prepublishOnly": "npm run clean && npm run build"
   },
   "devDependencies": {
     "@jest/globals": "^29.7.0",

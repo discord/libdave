@@ -1,5 +1,6 @@
 #pragma once
 
+#include <bytes/bytes.h>
 #include <mls/key_schedule.h>
 
 #include "key_ratchet.h"
@@ -14,6 +15,8 @@ public:
 
     EncryptionKey GetKey(KeyGeneration generation) noexcept override;
     void DeleteKey(KeyGeneration generation) noexcept override;
+
+    const ::mlspp::HashRatchet& GetHashRatchet() const noexcept { return hashRatchet_; }
 
 private:
     ::mlspp::HashRatchet hashRatchet_;

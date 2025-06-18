@@ -1,5 +1,5 @@
 import {describe, expect, test} from '@jest/globals';
-import { generateKeyFingerprint } from '../KeyFingerprint';
+import {generateKeyFingerprint} from '../src/KeyFingerprint';
 
 describe('KeyFingerprint', () => {
   test('expectedOutput', async () => {

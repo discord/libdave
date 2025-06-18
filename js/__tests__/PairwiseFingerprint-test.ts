@@ -1,5 +1,5 @@
 import {describe, expect, test} from '@jest/globals';
-import { generatePairwiseFingerprint } from '../PairwiseFingerprint';
+import {generatePairwiseFingerprint} from '../src/PairwiseFingerprint';
 
 describe('PairwiseFingerprint', () => {
   test('expectedOutput', async () => {
