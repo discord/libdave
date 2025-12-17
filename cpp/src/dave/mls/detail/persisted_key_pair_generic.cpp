@@ -11,6 +11,7 @@
 #ifdef _WIN32
 #include <io.h>
 #else
+#include <sys/stat.h>
 #include <unistd.h>
 #endif
 #include <fcntl.h>
