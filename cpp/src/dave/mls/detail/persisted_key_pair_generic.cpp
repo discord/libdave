@@ -13,6 +13,7 @@
 #else
 #include <sys/stat.h>
 #include <unistd.h>
+#include <sys/stat.h>
 #endif
 #include <fcntl.h>
 
