@@ -3,7 +3,7 @@
 #include <bytes/bytes.h>
 #include <mls/key_schedule.h>
 
-#include "key_ratchet.h"
+#include "dave_interfaces.h"
 
 namespace discord {
 namespace dave {

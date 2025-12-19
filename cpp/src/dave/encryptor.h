@@ -8,52 +8,48 @@
 #include <mutex>
 #include <vector>
 
+#include <dave_interfaces.h>
+
 #include "dave/codec_utils.h"
 #include "dave/common.h"
 #include "dave/cryptor.h"
 #include "dave/frame_processors.h"
-#include "dave/key_ratchet.h"
 #include "dave/version.h"
 
 namespace discord {
 namespace dave {
 
-struct EncryptorStats {
-    uint64_t passthroughCount = 0;
-    uint64_t encryptSuccessCount = 0;
-    uint64_t encryptFailureCount = 0;
-    uint64_t encryptDuration = 0;
-    uint64_t encryptAttempts = 0;
-    uint64_t encryptMaxAttempts = 0;
-    uint64_t encryptMissingKeyCount = 0;
-};
-
-class Encryptor {
+class Encryptor final : public IEncryptor {
 public:
-    void SetKeyRatchet(std::unique_ptr<IKeyRatchet> keyRatchet);
-    void SetPassthroughMode(bool passthroughMode);
+    virtual ~Encryptor() noexcept = default;
 
-    bool HasKeyRatchet() const { return keyRatchet_ != nullptr; }
-    bool IsPassthroughMode() const { return passthroughMode_; }
+    virtual void SetKeyRatchet(std::unique_ptr<IKeyRatchet> keyRatchet) override;
+    virtual void SetPassthroughMode(bool passthroughMode) override;
 
-    void AssignSsrcToCodec(uint32_t ssrc, Codec codecType);
-    Codec CodecForSsrc(uint32_t ssrc);
+    virtual bool HasKeyRatchet() const override { return keyRatchet_ != nullptr; }
+    virtual bool IsPassthroughMode() const override { return passthroughMode_; }
 
-    int Encrypt(MediaType mediaType,
-                uint32_t ssrc,
-                ArrayView<const uint8_t> frame,
-                ArrayView<uint8_t> encryptedFrame,
-                size_t* bytesWritten);
+    virtual void AssignSsrcToCodec(uint32_t ssrc, Codec codecType) override;
+    virtual Codec CodecForSsrc(uint32_t ssrc) override;
 
-    size_t GetMaxCiphertextByteSize(MediaType mediaType, size_t frameSize);
-    EncryptorStats GetStats(MediaType mediaType) const { return stats_[mediaType]; }
+    virtual ResultCode Encrypt(MediaType mediaType,
+                               uint32_t ssrc,
+                               ArrayView<const uint8_t> frame,
+                               ArrayView<uint8_t> encryptedFrame,
+                               size_t* bytesWritten) override;
+
+    virtual size_t GetMaxCiphertextByteSize(MediaType mediaType, size_t frameSize) override;
+    virtual EncryptorStats GetStats(MediaType mediaType) const override
+    {
+        return stats_[mediaType];
+    }
 
     using ProtocolVersionChangedCallback = std::function<void()>;
-    void SetProtocolVersionChangedCallback(ProtocolVersionChangedCallback callback)
+    virtual void SetProtocolVersionChangedCallback(ProtocolVersionChangedCallback callback) override
     {
         protocolVersionChangedCallback_ = std::move(callback);
     }
-    ProtocolVersion GetProtocolVersion() const { return currentProtocolVersion_; }
+    virtual ProtocolVersion GetProtocolVersion() const override { return currentProtocolVersion_; }
 
 private:
     std::unique_ptr<OutboundFrameProcessor> GetOrCreateFrameProcessor();
@@ -63,16 +59,6 @@ private:
     CryptorAndNonce GetNextCryptorAndNonce();
 
     void UpdateCurrentProtocolVersion(ProtocolVersion version);
-
-    enum ResultCode {
-        Success,
-        UninitializedContext,
-        InitializationFailure,
-        UnsupportedCodec,
-        EncryptionFailure,
-        FinalizationFailure,
-        TagAppendFailure
-    };
 
     std::atomic_bool passthroughMode_{false};
 

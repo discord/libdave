@@ -3,18 +3,22 @@ cmake_minimum_required(VERSION 3.20)
 project(
   libdave
   VERSION 1.0
-  LANGUAGES CXX
+  LANGUAGES CXX C
 )
 
 option(REQUIRE_BORINGSSL "Require BoringSSL instead of OpenSSL" OFF)
 option(TESTING "Build tests" OFF)
 option(PERSISTENT_KEYS "Enable storage of persistent signature keys" OFF)
+option(BUILD_SHARED_LIBS "Build shared libraries" OFF)
+option(ENABLE_SANITIZERS "Enable address and undefined behavior sanitizers" OFF)
 
 include(CheckCXXCompilerFlag)
 include(CMakeFindDependencyMacro)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 if (CMAKE_CXX_COMPILER_ID MATCHES "Clang" OR CMAKE_CXX_COMPILER_ID MATCHES "GNU")
   add_compile_options(-Wall -pedantic -Wextra -Werror)
@@ -24,7 +28,24 @@ elseif(MSVC)
 
   # MSVC helpfully recommends safer equivalents for things like
   # getenv, but they are not portable.
-  add_definitions(-D_CRT_SECURE_NO_WARNINGS)  
+  add_definitions(-D_CRT_SECURE_NO_WARNINGS)
+endif()
+
+# Configure sanitizers
+if (ENABLE_SANITIZERS)
+  if (CMAKE_CXX_COMPILER_ID MATCHES "Clang" OR CMAKE_CXX_COMPILER_ID MATCHES "GNU")
+    set(SANITIZER_FLAGS "-fsanitize=address,undefined -fno-omit-frame-pointer -fno-optimize-sibling-calls")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${SANITIZER_FLAGS}")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${SANITIZER_FLAGS}")
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${SANITIZER_FLAGS}")
+    set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} ${SANITIZER_FLAGS}")
+    message(STATUS "Sanitizers enabled: address, undefined")
+  elseif(MSVC)
+    set(SANITIZER_FLAGS "/fsanitize=address")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${SANITIZER_FLAGS}")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${SANITIZER_FLAGS}")
+    message(STATUS "Sanitizers enabled: address")
+  endif()
 endif()
 
 find_package(OpenSSL REQUIRED)
@@ -69,7 +90,7 @@ find_dependency(MLSPP REQUIRED)
 set(CMAKE_STATIC_LIBRARY_PREFIX "")
 
 SET(LIB_NAME ${PROJECT_NAME})
-file(GLOB_RECURSE LIB_HEADERS CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/*.h")
+file(GLOB_RECURSE LIB_HEADERS CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/*.h" "${CMAKE_CURRENT_SOURCE_DIR}/includes/*.h")
 file(GLOB_RECURSE LIB_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp")
 
 # remove all of the persistent key files
@@ -110,6 +131,8 @@ endif ()
 
 if (NOT DEFINED EMSCRIPTEN)
   list(FILTER LIB_SOURCES EXCLUDE REGEX ".*_wasm.cpp")
+else()
+  list(FILTER LIB_SOURCES EXCLUDE REGEX ".*_capi.cpp")
 endif()
 
 if (BORINGSSL_INCLUDE_DIR)
@@ -132,18 +155,28 @@ if (DEFINED EMSCRIPTEN)
   set_target_properties(${LIB_NAME} PROPERTIES LINK_FLAGS    "${LINK_FLAGS}")
 else()
   add_library(${LIB_NAME} ${LIB_HEADERS} ${LIB_SOURCES})
+
+  if (BUILD_SHARED_LIBS)
+    # Whithout this the resulting file is called liblibdave.dylib
+    set_target_properties(${LIB_NAME} PROPERTIES OUTPUT_NAME dave)
+  endif()
 endif()
 
 target_include_directories(
   ${LIB_NAME}
   PUBLIC
     $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/src>
+    $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/includes>
     $<INSTALL_INTERFACE:include/${PROJECT_NAME}>
     ${OPENSSL_INCLUDE_DIR}
 )
 
 target_link_libraries(${LIB_NAME} PUBLIC OpenSSL::Crypto)
 target_link_libraries(${LIB_NAME} PUBLIC MLSPP::mlspp)
+
+if (APPLE AND PERSISTENT_KEYS)
+  target_link_libraries(${LIB_NAME} PUBLIC "-framework CoreFoundation" "-framework Security")
+endif()
 
 if (TESTING)
   add_subdirectory(test)

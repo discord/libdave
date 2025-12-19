@@ -1,8 +1,9 @@
 #pragma once
 
+#include <array_view.h>
+
 #include "common.h"
 #include "dave/frame_processors.h"
-#include "utils/array_view.h"
 
 namespace discord {
 namespace dave {

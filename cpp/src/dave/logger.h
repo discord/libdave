@@ -1,7 +1,8 @@
 #pragma once
 
 #include <sstream>
-#include <vector>
+
+#include "dave_interfaces.h"
 
 #if !defined(DISCORD_LOG)
 #define DISCORD_LOG_FILE_LINE(sev, file, line) ::discord::dave::LogStreamer(sev, file, line)
@@ -9,14 +10,6 @@
 #endif
 namespace discord {
 namespace dave {
-
-enum LoggingSeverity {
-    LS_VERBOSE,
-    LS_INFO,
-    LS_WARNING,
-    LS_ERROR,
-    LS_NONE,
-};
 
 using LogSink = void (*)(LoggingSeverity severity,
                          const char* file,

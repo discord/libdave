@@ -7,7 +7,6 @@
 
 #include "cryptor.h"
 #include "dave/common.h"
-#include "key_ratchet.h"
 #include "utils/clock.h"
 
 namespace discord {

@@ -5,8 +5,10 @@
 #include <utility>
 #include <vector>
 
+#include <array_view.h>
+
 #include "common.h"
-#include "utils/array_view.h"
+#include "dave_interfaces.h"
 
 namespace discord {
 namespace dave {

@@ -16,6 +16,11 @@ namespace dave {
 
 constexpr auto kStatsInterval = 10s;
 
+std::unique_ptr<IDecryptor> CreateDecryptor()
+{
+    return std::make_unique<Decryptor>();
+}
+
 void Decryptor::TransitionToKeyRatchet(std::unique_ptr<IKeyRatchet> keyRatchet,
                                        Duration transitionExpiry)
 {
@@ -42,14 +47,16 @@ void Decryptor::TransitionToPassthroughMode(bool passthroughMode, Duration trans
     }
 }
 
-size_t Decryptor::Decrypt(MediaType mediaType,
-                          ArrayView<const uint8_t> encryptedFrame,
-                          ArrayView<uint8_t> frame)
+Decryptor::ResultCode Decryptor::Decrypt(MediaType mediaType,
+                                         ArrayView<const uint8_t> encryptedFrame,
+                                         ArrayView<uint8_t> frame,
+                                         size_t* bytesWritten)
 {
     if (mediaType != Audio && mediaType != Video) {
         DISCORD_LOG(LS_WARNING) << "Decrypt failed, invalid media type: "
                                 << static_cast<int>(mediaType);
-        return 0;
+        *bytesWritten = 0;
+        return ResultCode::DecryptionFailure;
     }
     auto& stats = stats_[mediaType];
 
@@ -66,7 +73,8 @@ size_t Decryptor::Decrypt(MediaType mediaType,
         if (encryptedFrame.data() != frame.data()) {
             memcpy(frame.data(), encryptedFrame.data(), copySize);
         }
-        return copySize;
+        *bytesWritten = copySize;
+        return ResultCode::Success;
     }
 
     // Remove any expired cryptor manager
@@ -85,7 +93,8 @@ size_t Decryptor::Decrypt(MediaType mediaType,
             memcpy(frame.data(), encryptedFrame.data(), copySize);
         }
         stats_[mediaType].passthroughCount++;
-        return copySize;
+        *bytesWritten = copySize;
+        return ResultCode::Success;
     }
 
     // If the frame is not encrypted and we can't pass it through, fail
@@ -93,7 +102,8 @@ size_t Decryptor::Decrypt(MediaType mediaType,
         DISCORD_LOG(LS_INFO)
           << "Decrypt failed, frame is not encrypted and pass through is disabled";
         stats_[mediaType].decryptFailureCount++;
-        return 0;
+        *bytesWritten = 0;
+        return ResultCode::DecryptionFailure;
     }
 
     // Try and decrypt with each valid cryptor
@@ -107,10 +117,10 @@ size_t Decryptor::Decrypt(MediaType mediaType,
         }
     }
 
-    size_t bytesWritten = 0;
+    size_t reconstructedFrameSize = 0;
     if (result == ResultCode::Success) {
         stats.decryptSuccessCount++;
-        bytesWritten = localFrame->ReconstructFrame(frame);
+        reconstructedFrameSize = localFrame->ReconstructFrame(frame);
     }
     else {
         stats.decryptFailureCount++;
@@ -140,7 +150,8 @@ size_t Decryptor::Decrypt(MediaType mediaType,
     stats.decryptDuration +=
       std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
 
-    return bytesWritten;
+    *bytesWritten = reconstructedFrameSize;
+    return result;
 }
 
 Decryptor::ResultCode Decryptor::DecryptImpl(CryptorManager& cryptorManager,

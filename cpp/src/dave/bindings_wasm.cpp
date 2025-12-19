@@ -1,4 +1,5 @@
 #include <cstdint>
+#include <memory>
 #include <set>
 #include <vector>
 
@@ -196,7 +197,10 @@ public:
 
     val GetKeyRatchet(std::string const& userId)
     {
-        return MlsKeyRatchetToJS(session_->GetKeyRatchet(userId));
+        auto keyRatchet = session_->GetKeyRatchet(userId);
+        auto mlsKeyRatchet =
+          std::unique_ptr<MlsKeyRatchet>(static_cast<MlsKeyRatchet*>(keyRatchet.release()));
+        return MlsKeyRatchetToJS(std::move(mlsKeyRatchet));
     }
 
 private:
@@ -298,7 +302,11 @@ public:
         }
         auto plaintextView = MakeArrayView(frame, maxPlaintextByteSize);
 
-        auto bytesWritten = decryptor_->Decrypt(mediaType, frameView, plaintextView);
+        size_t bytesWritten = 0;
+        auto result = decryptor_->Decrypt(mediaType, frameView, plaintextView, &bytesWritten);
+        if (result != Decryptor::ResultCode::Success) {
+            return 0;
+        }
         return bytesWritten;
     }
 

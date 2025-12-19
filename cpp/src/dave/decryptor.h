@@ -7,6 +7,8 @@
 #include <mutex>
 #include <vector>
 
+#include <dave_interfaces.h>
+
 #include "codec_utils.h"
 #include "common.h"
 #include "cryptor.h"
@@ -20,46 +22,36 @@ namespace dave {
 
 class IKeyRatchet;
 
-struct DecryptorStats {
-    uint64_t passthroughCount = 0;
-    uint64_t decryptSuccessCount = 0;
-    uint64_t decryptFailureCount = 0;
-    uint64_t decryptDuration = 0;
-    uint64_t decryptAttempts = 0;
-    uint64_t decryptMissingKeyCount = 0;
-    uint64_t decryptInvalidNonceCount = 0;
-};
-
-class Decryptor {
+class Decryptor final : public IDecryptor {
 public:
     using Duration = std::chrono::seconds;
 
-    void TransitionToKeyRatchet(std::unique_ptr<IKeyRatchet> keyRatchet,
-                                Duration transitionExpiry = kDefaultTransitionDuration);
-    void TransitionToPassthroughMode(bool passthroughMode,
-                                     Duration transitionExpiry = kDefaultTransitionDuration);
+    virtual ~Decryptor() noexcept = default;
 
-    size_t Decrypt(MediaType mediaType,
-                   ArrayView<const uint8_t> encryptedFrame,
-                   ArrayView<uint8_t> frame);
+    virtual void TransitionToKeyRatchet(
+      std::unique_ptr<IKeyRatchet> keyRatchet,
+      Duration transitionExpiry = kDefaultTransitionDuration) override;
+    virtual void TransitionToPassthroughMode(
+      bool passthroughMode,
+      Duration transitionExpiry = kDefaultTransitionDuration) override;
 
-    size_t GetMaxPlaintextByteSize(MediaType mediaType, size_t encryptedFrameSize);
-    DecryptorStats GetStats(MediaType mediaType) const { return stats_[mediaType]; }
+    virtual ResultCode Decrypt(MediaType mediaType,
+                               ArrayView<const uint8_t> encryptedFrame,
+                               ArrayView<uint8_t> frame,
+                               size_t* bytesWritten) override;
+
+    virtual size_t GetMaxPlaintextByteSize(MediaType mediaType, size_t encryptedFrameSize) override;
+    virtual DecryptorStats GetStats(MediaType mediaType) const override
+    {
+        return stats_[mediaType];
+    }
 
 private:
     using TimePoint = IClock::TimePoint;
 
-    enum ResultCode {
-        Success,
-        MissingKeyRatchet,
-        InvalidNonce,
-        MissingCryptor,
-        DecryptionFailure,
-    };
-
-    ResultCode DecryptImpl(CryptorManager& cryptor,
-                           MediaType mediaType,
-                           InboundFrameProcessor& encryptedFrame);
+    Decryptor::ResultCode DecryptImpl(CryptorManager& cryptor,
+                                      MediaType mediaType,
+                                      InboundFrameProcessor& encryptedFrame);
 
     void UpdateCryptorManagerExpiry(Duration expiry);
     void CleanupExpiredCryptorManagers();

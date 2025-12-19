@@ -12,3 +12,10 @@ add_dependencies(${TEST_APP_NAME} ${LIB_NAME})
 target_include_directories(${TEST_APP_NAME} PRIVATE ${PROJECT_SOURCE_DIR}/src)
 
 target_link_libraries(libdave_test PRIVATE ${LIB_NAME} GTest::gtest_main GTest::gmock MLSPP::bytes)
+
+add_test(NAME ${TEST_APP_NAME} COMMAND ${TEST_APP_NAME})
+
+# Add C API tests if shared library is built
+if (BUILD_SHARED_LIBS)
+    add_subdirectory(capi)
+endif()

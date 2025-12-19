@@ -1,11 +1,12 @@
 #include <vector>
 #include "gtest/gtest.h"
 
+#include <array_view.h>
+
 #include "dave/codec_utils.h"
 #include "dave/decryptor.h"
 #include "dave/encryptor.h"
 #include "dave/frame_processors.h"
-#include "dave/utils/array_view.h"
 
 #include "dave_test.h"
 #include "static_key_ratchet.h"

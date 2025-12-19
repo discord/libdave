@@ -8,6 +8,8 @@
 #include <jni.h>
 #endif
 
+#include <dave_interfaces.h>
+
 #include "dave/version.h"
 
 namespace mlspp {
@@ -17,12 +19,6 @@ struct SignaturePrivateKey;
 namespace discord {
 namespace dave {
 namespace mls {
-
-#if defined(__ANDROID__)
-typedef JNIEnv* KeyPairContextType;
-#else
-typedef const char* KeyPairContextType;
-#endif
 
 std::shared_ptr<::mlspp::SignaturePrivateKey> GetPersistedKeyPair(KeyPairContextType ctx,
                                                                   const std::string& sessionID,

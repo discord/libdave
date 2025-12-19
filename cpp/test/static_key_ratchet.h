@@ -2,7 +2,7 @@
 
 #include <string>
 
-#include "dave/key_ratchet.h"
+#include "dave_interfaces.h"
 
 namespace discord {
 namespace dave {

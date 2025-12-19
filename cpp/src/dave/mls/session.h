@@ -8,8 +8,10 @@
 #include <string>
 #include <vector>
 
-#include "dave/mls_key_ratchet.h"
+#include <dave_interfaces.h>
+
 #include "dave/mls/persisted_key_pair.h"
+#include "dave/mls_key_ratchet.h"
 #include "dave/version.h"
 
 namespace mlspp {
@@ -30,48 +32,53 @@ namespace mls {
 
 struct QueuedProposal;
 
-class Session {
+class Session final : public ISession {
 public:
-    using MLSFailureCallback = std::function<void(std::string const&, std::string const&)>;
-
     Session(KeyPairContextType context,
             std::string authSessionId,
             MLSFailureCallback callback) noexcept;
 
-    ~Session() noexcept;
+    virtual ~Session() noexcept;
 
-    void Init(ProtocolVersion version,
-              uint64_t groupId,
-              std::string const& selfUserId,
-              std::shared_ptr<::mlspp::SignaturePrivateKey>& transientKey) noexcept;
-    void Reset() noexcept;
+    virtual void Init(
+      ProtocolVersion version,
+      uint64_t groupId,
+      std::string const& selfUserId,
+      std::shared_ptr<::mlspp::SignaturePrivateKey>& transientKey) noexcept override;
+    virtual void Reset() noexcept override;
 
-    void SetProtocolVersion(ProtocolVersion version) noexcept;
-    ProtocolVersion GetProtocolVersion() const noexcept { return protocolVersion_; }
+    virtual void SetProtocolVersion(ProtocolVersion version) noexcept override;
+    virtual ProtocolVersion GetProtocolVersion() const noexcept override
+    {
+        return protocolVersion_;
+    }
 
-    std::vector<uint8_t> GetLastEpochAuthenticator() const noexcept;
+    virtual std::vector<uint8_t> GetLastEpochAuthenticator() const noexcept override;
 
-    void SetExternalSender(std::vector<uint8_t> const& externalSenderPackage) noexcept;
+    virtual void SetExternalSender(
+      std::vector<uint8_t> const& externalSenderPackage) noexcept override;
 
-    std::optional<std::vector<uint8_t>> ProcessProposals(
+    virtual std::optional<std::vector<uint8_t>> ProcessProposals(
       std::vector<uint8_t> proposals,
-      std::set<std::string> const& recognizedUserIDs) noexcept;
+      std::set<std::string> const& recognizedUserIDs) noexcept override;
 
-    RosterVariant ProcessCommit(std::vector<uint8_t> commit) noexcept;
+    virtual RosterVariant ProcessCommit(std::vector<uint8_t> commit) noexcept override;
 
-    std::optional<RosterMap> ProcessWelcome(
+    virtual std::optional<RosterMap> ProcessWelcome(
       std::vector<uint8_t> welcome,
-      std::set<std::string> const& recognizedUserIDs) noexcept;
+      std::set<std::string> const& recognizedUserIDs) noexcept override;
 
-    std::vector<uint8_t> GetMarshalledKeyPackage() noexcept;
+    virtual std::vector<uint8_t> GetMarshalledKeyPackage() noexcept override;
 
-    std::unique_ptr<MlsKeyRatchet> GetKeyRatchet(std::string const& userId) const noexcept;
+    virtual std::unique_ptr<IKeyRatchet> GetKeyRatchet(
+      std::string const& userId) const noexcept override;
 
     using PairwiseFingerprintCallback = std::function<void(std::vector<uint8_t> const&)>;
 
-    void GetPairwiseFingerprint(uint16_t version,
-                                std::string const& userId,
-                                PairwiseFingerprintCallback callback) const noexcept;
+    virtual void GetPairwiseFingerprint(
+      uint16_t version,
+      std::string const& userId,
+      PairwiseFingerprintCallback callback) const noexcept override;
 
 private:
     void InitLeafNode(std::string const& selfUserId,

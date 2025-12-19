@@ -5,9 +5,10 @@
 #include <limits>
 #include <optional>
 
+#include <array_view.h>
+
 #include "codec_utils.h"
 #include "logger.h"
-#include "utils/array_view.h"
 #include "utils/leb128.h"
 
 #if defined(_MSC_VER)

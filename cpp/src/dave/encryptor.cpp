@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cstring>
 
+#include <array_view.h>
 #include <bytes/bytes.h>
 
 #include "common.h"
@@ -10,7 +11,6 @@
 #include "dave/common.h"
 #include "dave/cryptor_manager.h"
 #include "dave/logger.h"
-#include "dave/utils/array_view.h"
 #include "dave/utils/leb128.h"
 #include "dave/utils/scope_exit.h"
 
@@ -20,6 +20,11 @@ namespace discord {
 namespace dave {
 
 constexpr auto kStatsInterval = 10s;
+
+std::unique_ptr<IEncryptor> CreateEncryptor()
+{
+    return std::make_unique<Encryptor>();
+}
 
 void Encryptor::SetKeyRatchet(std::unique_ptr<IKeyRatchet> keyRatchet)
 {
@@ -36,16 +41,16 @@ void Encryptor::SetPassthroughMode(bool passthroughMode)
     UpdateCurrentProtocolVersion(passthroughMode ? 0 : MaxSupportedProtocolVersion());
 }
 
-int Encryptor::Encrypt(MediaType mediaType,
-                       uint32_t ssrc,
-                       ArrayView<const uint8_t> frame,
-                       ArrayView<uint8_t> encryptedFrame,
-                       size_t* bytesWritten)
+Encryptor::ResultCode Encryptor::Encrypt(MediaType mediaType,
+                                         uint32_t ssrc,
+                                         ArrayView<const uint8_t> frame,
+                                         ArrayView<uint8_t> encryptedFrame,
+                                         size_t* bytesWritten)
 {
     if (mediaType != Audio && mediaType != Video) {
         DISCORD_LOG(LS_WARNING) << "Encrypt failed, invalid media type: "
                                 << static_cast<int>(mediaType);
-        return 0;
+        return ResultCode::EncryptionFailure;
     }
     auto& stats = stats_[mediaType];
 

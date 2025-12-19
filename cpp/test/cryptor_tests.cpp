@@ -43,9 +43,12 @@ TEST_F(DaveTests, PassthroughInOutBuffer)
     Decryptor decryptor;
     decryptor.TransitionToPassthroughMode(true, 0s);
 
-    auto decryptResult = decryptor.Decrypt(MediaType::Audio, frameViewIn, frameViewOut);
+    bytesWritten = 0;
+    auto decryptResult =
+      decryptor.Decrypt(MediaType::Audio, frameViewIn, frameViewOut, &bytesWritten);
 
-    EXPECT_EQ(decryptResult, frameCopy.size());
+    EXPECT_EQ(decryptResult, Decryptor::ResultCode::Success);
+    EXPECT_EQ(bytesWritten, frameCopy.size());
     EXPECT_EQ(memcmp(incomingFrame.data(), frameCopy.data(), bytesWritten), 0);
 }
 
@@ -73,11 +76,14 @@ TEST_F(DaveTests, PassthroughTwoBuffers)
     Decryptor decryptor;
     decryptor.TransitionToPassthroughMode(true, 0s);
 
+    size_t bytesDecrypted = 0;
     auto decryptResult = decryptor.Decrypt(MediaType::Audio,
                                            {encryptedFrame.data(), bytesWritten},
-                                           {decryptedFrame.data(), decryptedFrame.size()});
+                                           {decryptedFrame.data(), decryptedFrame.size()},
+                                           &bytesDecrypted);
 
-    EXPECT_EQ(decryptResult, incomingFrame.size());
+    EXPECT_EQ(decryptResult, Decryptor::ResultCode::Success);
+    EXPECT_EQ(bytesDecrypted, incomingFrame.size());
     EXPECT_EQ(memcmp(encryptedFrame.data(), decryptedFrame.data(), decryptResult), 0);
 }
 
@@ -89,11 +95,14 @@ TEST_F(DaveTests, SilencePacketPassthrough)
     decryptor.TransitionToKeyRatchet(std::make_unique<StaticKeyRatchet>("0123456789876543210"), 0s);
 
     auto decryptedFrame = std::vector<uint8_t>(WorkerSilencePacket.size());
+    size_t bytesWritten = 0;
     auto decryptResult = decryptor.Decrypt(MediaType::Audio,
                                            {WorkerSilencePacket.data(), WorkerSilencePacket.size()},
-                                           {decryptedFrame.data(), decryptedFrame.size()});
+                                           {decryptedFrame.data(), decryptedFrame.size()},
+                                           &bytesWritten);
 
-    EXPECT_EQ(decryptResult, WorkerSilencePacket.size());
+    EXPECT_EQ(decryptResult, Decryptor::ResultCode::Success);
+    EXPECT_EQ(bytesWritten, WorkerSilencePacket.size());
     EXPECT_EQ(memcmp(WorkerSilencePacket.data(), decryptedFrame.data(), decryptResult), 0);
 }
 
@@ -125,10 +134,13 @@ TEST_F(DaveTests, RandomOpusFrameEncryptDecrypt)
         EXPECT_GE(bytesWritten, incomingFrame.size());
 
         // decrypt frame
+        size_t bytesDecrypted = 0;
         auto decryptResult = decryptor.Decrypt(MediaType::Audio,
                                                {encryptedFrame.data(), bytesWritten},
-                                               {decryptedFrame.data(), decryptedFrame.size()});
-        EXPECT_EQ(decryptResult, incomingFrame.size());
+                                               {decryptedFrame.data(), decryptedFrame.size()},
+                                               &bytesDecrypted);
+        EXPECT_EQ(decryptResult, Decryptor::ResultCode::Success);
+        EXPECT_EQ(bytesDecrypted, incomingFrame.size());
         EXPECT_EQ(memcmp(incomingFrame.data(), decryptedFrame.data(), incomingFrame.size()), 0);
     }
 }

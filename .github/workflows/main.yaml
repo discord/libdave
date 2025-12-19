@@ -47,6 +47,8 @@ jobs:
           -DVCPKG_MANIFEST_DIR="${{ env.CRYPTO_ALT_DIR }}" 
           -DPERSISTENT_KEYS=${{ matrix.persistent_keys }} 
           -DTESTING=ON
+          -DBUILD_SHARED_LIBS=ON
+          -DENABLE_SANITIZERS=ON
 
       - name: build
         run: cmake --build "${{ runner.temp }}/build_${{ matrix.crypto }}"
@@ -54,6 +56,10 @@ jobs:
       - name: test
         run: |
           ${{ runner.temp }}/build_${{ matrix.crypto }}/test/libdave_test
+      
+      - name: test-capi
+        run: |
+          ${{ runner.temp }}/build_${{ matrix.crypto }}/test/capi/capi_test
 
       - name: Archive mlspp
         uses: actions/upload-artifact@v4

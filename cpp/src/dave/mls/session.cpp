@@ -10,6 +10,7 @@
 #include <mls/messages.h>
 #include <mls/state.h>
 
+#include "dave/common.h"
 #include "dave/logger.h"
 #include "dave/mls/parameters.h"
 #include "dave/mls/persisted_key_pair.h"
@@ -32,6 +33,13 @@ struct QueuedProposal {
     ::mlspp::ValidatedContent content;
     ::mlspp::bytes_ns::bytes ref;
 };
+
+std::unique_ptr<ISession> CreateSession(KeyPairContextType context,
+                                        std::string authSessionId,
+                                        MLSFailureCallback callback) noexcept
+{
+    return std::make_unique<Session>(context, authSessionId, callback);
+}
 
 Session::Session(KeyPairContextType context,
                  std::string authSessionId,
@@ -691,7 +699,7 @@ catch (const std::exception& e) {
     return {};
 }
 
-std::unique_ptr<MlsKeyRatchet> Session::GetKeyRatchet(std::string const& userId) const noexcept
+std::unique_ptr<IKeyRatchet> Session::GetKeyRatchet(std::string const& userId) const noexcept
 {
     if (!currentState_) {
         DISCORD_LOG(LS_ERROR) << "Cannot get key ratchet without an established MLS group";

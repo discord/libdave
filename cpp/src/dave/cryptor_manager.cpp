@@ -2,7 +2,6 @@
 
 #include <limits>
 
-#include "key_ratchet.h"
 #include "logger.h"
 
 #include <bytes/bytes.h>

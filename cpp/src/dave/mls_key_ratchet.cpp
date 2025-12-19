@@ -2,6 +2,7 @@
 
 #include <cassert>
 
+#include "dave/common.h"
 #include "dave/logger.h"
 
 namespace discord {

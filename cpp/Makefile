@@ -11,13 +11,35 @@ EMSCRIPTEN_TOOLCHAIN_FILE=${EMSDK}/upstream/emscripten/cmake/Modules/Platform/Em
 all: ${BUILD_DIR}
 	cmake --build ${BUILD_DIR} --target libdave
 
+shared: ${BUILD_DIR}-shared
+	cmake --build ${BUILD_DIR} --target libdave
+
 ${BUILD_DIR}: CMakeLists.txt test/CMakeLists.txt
 	cmake -B${BUILD_DIR}  \
 		-DVCPKG_MANIFEST_DIR=${OPENSSL_3_MANIFEST} \
 		-DCMAKE_TOOLCHAIN_FILE=${TOOLCHAIN_FILE}
 
+${BUILD_DIR}-shared: CMakeLists.txt test/CMakeLists.txt
+	cmake -B${BUILD_DIR}  \
+		-DVCPKG_MANIFEST_DIR=${OPENSSL_3_MANIFEST} \
+		-DCMAKE_TOOLCHAIN_FILE=${TOOLCHAIN_FILE} \
+		-DBUILD_SHARED_LIBS=ON
+
 dev: ${TOOLCHAIN_FILE}
 	cmake -B${BUILD_DIR} -DTESTING=ON -DCMAKE_BUILD_TYPE=Debug \
+		-DVCPKG_MANIFEST_DIR=${OPENSSL_3_MANIFEST} \
+		-DCMAKE_TOOLCHAIN_FILE=${TOOLCHAIN_FILE}
+
+dev-shared: ${TOOLCHAIN_FILE}
+	cmake -B${BUILD_DIR} -DTESTING=ON -DCMAKE_BUILD_TYPE=Debug \
+		-DBUILD_SHARED_LIBS=ON \
+		-DVCPKG_MANIFEST_DIR=${OPENSSL_3_MANIFEST} \
+		-DCMAKE_TOOLCHAIN_FILE=${TOOLCHAIN_FILE}
+
+dev-sanitizers: ${TOOLCHAIN_FILE}
+	cmake -B${BUILD_DIR} -DTESTING=ON -DCMAKE_BUILD_TYPE=Debug \
+		-DBUILD_SHARED_LIBS=ON \
+		-DENABLE_SANITIZERS=ON \
 		-DVCPKG_MANIFEST_DIR=${OPENSSL_3_MANIFEST} \
 		-DCMAKE_TOOLCHAIN_FILE=${TOOLCHAIN_FILE}
 
@@ -53,11 +75,32 @@ check-emsdk:
 test: dev test/*
 	cmake --build ${BUILD_DIR} --target libdave_test
 
+test-capi: dev-shared test/capi/*
+	cmake --build ${BUILD_DIR} --target capi_test
+
+test-sanitizers: dev-sanitizers test/*
+	cmake --build ${BUILD_DIR} --target libdave_test
+
+test-capi-sanitizers: dev-sanitizers test/capi/*
+	cmake --build ${BUILD_DIR} --target capi_test
+
 dtest: test
 	${TEST_DIR}/libdave_test
 
+dtest-capi: test-capi
+	${TEST_DIR}/capi/capi_test
+
+dtest-sanitizers: test-sanitizers
+	${TEST_DIR}/libdave_test
+
+dtest-capi-sanitizers: test-capi-sanitizers
+	${TEST_DIR}/capi/capi_test
+
 dbtest: test
 	lldb ${TEST_DIR}/libdave_test
+
+dbtest-capi: test-capi
+	lldb ${TEST_DIR}/capi/capi_test
 
 ctest: test
 	cmake --build ${BUILD_DIR} --target test
@@ -69,5 +112,5 @@ cclean:
 	rm -rf ${BUILD_DIR}
 
 format:
-	find src -iname "*.h" -or -iname "*.cpp" | xargs ${CLANG_FORMAT}
-	find test -iname "*.h" -or -iname "*.cpp" | xargs ${CLANG_FORMAT}
+	find src -iname "*.h" -or -iname "*.cpp" -or -iname "*.c" | xargs ${CLANG_FORMAT}
+	find test -iname "*.h" -or -iname "*.cpp" -or -iname "*.c" | xargs ${CLANG_FORMAT}

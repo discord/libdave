@@ -10,36 +10,14 @@
 
 #include "version.h"
 
-namespace mlspp::bytes_ns {
-struct bytes;
-};
-
 namespace discord {
 namespace dave {
 
 using UnencryptedFrameHeaderSize = uint16_t;
 using TruncatedSyncNonce = uint32_t;
 using MagicMarker = uint16_t;
-using EncryptionKey = ::mlspp::bytes_ns::bytes;
 using TransitionId = uint16_t;
 using SupplementalBytesSize = uint8_t;
-
-enum MediaType : uint8_t { Audio, Video };
-enum Codec : uint8_t { Unknown, Opus, VP8, VP9, H264, H265, AV1 };
-
-// Returned in std::variant when a message is hard-rejected and should trigger a reset
-struct failed_t {};
-
-// Returned in std::variant when a message is soft-rejected and should not trigger a reset
-struct ignored_t {};
-
-// Map of ID-key pairs.
-// In ProcessCommit, this lists IDs whose keys have been added, changed, or removed;
-// an empty value value means a key was removed.
-using RosterMap = std::map<uint64_t, std::vector<uint8_t>>;
-
-// Return type for functions producing RosterMap or hard or soft failures
-using RosterVariant = std::variant<failed_t, ignored_t, RosterMap>;
 
 constexpr MagicMarker kMarkerBytes = 0xFAFA;
 
@@ -58,7 +36,6 @@ constexpr size_t kSupplementalBytes =
 constexpr size_t kTransformPaddingBytes = 64;
 
 // Timing constants
-constexpr auto kDefaultTransitionDuration = std::chrono::seconds(10);
 constexpr auto kCryptorExpiry = std::chrono::seconds(10);
 
 // Behavior constants
