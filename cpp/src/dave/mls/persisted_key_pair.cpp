@@ -25,9 +25,7 @@ static std::string MakeKeyID(const std::string& sessionID, ::mlspp::CipherSuite 
 static std::mutex mtx;
 static std::map<std::string, std::shared_ptr<::mlspp::SignaturePrivateKey>> map;
 
-namespace discord {
-namespace dave {
-namespace mls {
+namespace discord::dave::mls {
 
 static std::shared_ptr<::mlspp::SignaturePrivateKey> GetPersistedKeyPair(
   [[maybe_unused]] KeyPairContextType ctx,
@@ -110,6 +108,4 @@ bool DeletePersistedKeyPair([[maybe_unused]] KeyPairContextType ctx,
     return native || generic;
 }
 
-} // namespace mls
-} // namespace dave
-} // namespace discord
+} // namespace discord::dave::mls

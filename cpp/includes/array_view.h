@@ -4,8 +4,7 @@
 #include <cstddef>
 #include <vector>
 
-namespace discord {
-namespace dave {
+namespace discord::dave {
 
 template <typename T>
 class ArrayView {
@@ -40,5 +39,4 @@ inline ArrayView<T> MakeArrayView(std::vector<T>& data)
     return ArrayView<T>(data.data(), data.size());
 }
 
-} // namespace dave
-} // namespace discord
+} // namespace discord::dave

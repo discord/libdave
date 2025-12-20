@@ -14,9 +14,7 @@
 using namespace testing;
 using namespace std::chrono_literals;
 
-namespace discord {
-namespace dave {
-namespace test {
+namespace discord::dave::test {
 
 // Gap can't be larger than the amount of bits allocated for it if we want to handle wraparound
 // correctly
@@ -194,6 +192,4 @@ TEST_F(DaveTests, CryptorManagerNoReprocess)
     EXPECT_TRUE(cryptorManager.CanProcessNonce(0, 11));
 }
 
-} // namespace test
-} // namespace dave
-} // namespace discord
+} // namespace discord::dave::test

@@ -1,8 +1,6 @@
 #include "persisted_key_pair.h"
 
-namespace discord {
-namespace dave {
-namespace mls {
+namespace discord::dave::mls {
 
 std::shared_ptr<::mlspp::SignaturePrivateKey> GetPersistedKeyPair(
   [[maybe_unused]] KeyPairContextType,
@@ -19,6 +17,4 @@ bool DeletePersistedKeyPair([[maybe_unused]] KeyPairContextType,
     return false;
 }
 
-} // namespace mls
-} // namespace dave
-} // namespace discord
+} // namespace discord::dave::mls

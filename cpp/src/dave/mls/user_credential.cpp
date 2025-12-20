@@ -4,9 +4,7 @@
 
 #include "dave/mls/util.h"
 
-namespace discord {
-namespace dave {
-namespace mls {
+namespace discord::dave::mls {
 
 ::mlspp::Credential CreateUserCredential(const std::string& userId,
                                          [[maybe_unused]] ProtocolVersion version)
@@ -32,6 +30,4 @@ std::string UserCredentialToString(const ::mlspp::Credential& cred,
     return std::to_string(uidVal);
 }
 
-} // namespace mls
-} // namespace dave
-} // namespace discord
+} // namespace discord::dave::mls

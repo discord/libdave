@@ -16,8 +16,7 @@
 
 using namespace std::chrono_literals;
 
-namespace discord {
-namespace dave {
+namespace discord::dave {
 
 constexpr auto kStatsInterval = 10s;
 
@@ -308,5 +307,4 @@ void Encryptor::UpdateCurrentProtocolVersion(ProtocolVersion version)
     }
 }
 
-} // namespace dave
-} // namespace discord
+} // namespace discord::dave

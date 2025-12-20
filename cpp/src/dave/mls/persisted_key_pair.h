@@ -16,9 +16,7 @@ namespace mlspp {
 struct SignaturePrivateKey;
 };
 
-namespace discord {
-namespace dave {
-namespace mls {
+namespace discord::dave::mls {
 
 std::shared_ptr<::mlspp::SignaturePrivateKey> GetPersistedKeyPair(KeyPairContextType ctx,
                                                                   const std::string& sessionID,
@@ -39,6 +37,4 @@ bool DeletePersistedKeyPair(KeyPairContextType ctx,
 
 constexpr unsigned KeyVersion = 1;
 
-} // namespace mls
-} // namespace dave
-} // namespace discord
+} // namespace discord::dave::mls

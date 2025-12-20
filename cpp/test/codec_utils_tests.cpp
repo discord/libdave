@@ -11,9 +11,7 @@
 #include "dave_test.h"
 #include "static_key_ratchet.h"
 
-namespace discord {
-namespace dave {
-namespace test {
+namespace discord::dave::test {
 
 TEST_F(DaveTests, RandomOpusFrame)
 {
@@ -375,6 +373,4 @@ TEST_F(DaveTests, H265TwoIdrSlice)
     EXPECT_EQ(unencryptedRanges[1].size, 6u);
 }
 
-} // namespace test
-} // namespace dave
-} // namespace discord
+} // namespace discord::dave::test

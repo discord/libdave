@@ -10,9 +10,7 @@
 using namespace testing;
 using namespace std::chrono_literals;
 
-namespace discord {
-namespace dave {
-namespace test {
+namespace discord::dave::test {
 
 constexpr std::string_view RandomBytes =
   "0dc5aedd5bdc3f20be5697e54dd1f437b896a36f858c6f20bbd69e2a493ca170c4f0c1b9acd4"
@@ -145,6 +143,4 @@ TEST_F(DaveTests, RandomOpusFrameEncryptDecrypt)
     }
 }
 
-} // namespace test
-} // namespace dave
-} // namespace discord
+} // namespace discord::dave::test

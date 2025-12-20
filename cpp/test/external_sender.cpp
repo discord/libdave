@@ -3,9 +3,7 @@
 #include "dave/mls/parameters.h"
 #include "dave/mls/util.h"
 
-namespace discord {
-namespace dave {
-namespace test {
+namespace discord::dave::test {
 
 ExternalSender::ExternalSender(discord::dave::ProtocolVersion protocolVersion, uint64_t groupId)
 {
@@ -57,6 +55,4 @@ std::pair<std::vector<uint8_t>, std::vector<uint8_t>> ExternalSender::SplitCommi
     return std::make_pair(commitBytes, welcomeBytes);
 }
 
-} // namespace test
-} // namespace dave
-} // namespace discord
+} // namespace discord::dave::test

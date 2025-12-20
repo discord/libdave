@@ -22,8 +22,7 @@ struct SignaturePrivateKey;
 } // namespace mlspp
 
 
-namespace discord {
-namespace dave {
+namespace discord::dave {
 
 using EncryptorStats = DAVEEncryptorStats;
 using DecryptorStats = DAVEDecryptorStats;
@@ -211,5 +210,4 @@ static_assert(DAVE_LOGGING_SEVERITY_WARNING == static_cast<int>(LoggingSeverity:
 static_assert(DAVE_LOGGING_SEVERITY_ERROR == static_cast<int>(LoggingSeverity::LS_ERROR));
 static_assert(DAVE_LOGGING_SEVERITY_NONE == static_cast<int>(LoggingSeverity::LS_NONE));
 
-} // namespace dave
-} // namespace discord
+} // namespace discord::dave

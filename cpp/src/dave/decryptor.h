@@ -17,8 +17,7 @@
 #include "frame_processors.h"
 #include "utils/clock.h"
 
-namespace discord {
-namespace dave {
+namespace discord::dave {
 
 class IKeyRatchet;
 
@@ -71,5 +70,4 @@ private:
     std::array<DecryptorStats, 2> stats_;
 };
 
-} // namespace dave
-} // namespace discord
+} // namespace discord::dave

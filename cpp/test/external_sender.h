@@ -4,9 +4,7 @@
 
 #include "dave/version.h"
 
-namespace discord {
-namespace dave {
-namespace test {
+namespace discord::dave::test {
 
 class ExternalSender {
 public:
@@ -25,6 +23,4 @@ private:
     ::mlspp::ExternalSender externalSender_;
 };
 
-} // namespace test
-} // namespace dave
-} // namespace discord
+} // namespace discord::dave::test

@@ -5,8 +5,7 @@
 
 #include "dave_interfaces.h"
 
-namespace discord {
-namespace dave {
+namespace discord::dave {
 
 class MlsKeyRatchet : public IKeyRatchet {
 public:
@@ -22,5 +21,4 @@ private:
     ::mlspp::HashRatchet hashRatchet_;
 };
 
-} // namespace dave
-} // namespace discord
+} // namespace discord::dave

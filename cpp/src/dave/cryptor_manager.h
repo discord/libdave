@@ -9,8 +9,7 @@
 #include "dave/common.h"
 #include "utils/clock.h"
 
-namespace discord {
-namespace dave {
+namespace discord::dave {
 
 KeyGeneration ComputeWrappedGeneration(KeyGeneration oldest, KeyGeneration generation);
 
@@ -54,5 +53,4 @@ private:
     std::deque<BigNonce> missingNonces_;
 };
 
-} // namespace dave
-} // namespace discord
+} // namespace discord::dave

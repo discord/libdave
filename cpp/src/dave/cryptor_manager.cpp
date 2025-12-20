@@ -8,8 +8,7 @@
 
 using namespace std::chrono_literals;
 
-namespace discord {
-namespace dave {
+namespace discord::dave {
 
 KeyGeneration ComputeWrappedGeneration(KeyGeneration oldest, KeyGeneration generation)
 {
@@ -179,5 +178,4 @@ void CryptorManager::CleanupExpiredCryptors()
     }
 }
 
-} // namespace dave
-} // namespace discord
+} // namespace discord::dave

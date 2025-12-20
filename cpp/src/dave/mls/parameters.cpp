@@ -1,8 +1,6 @@
 #include "parameters.h"
 
-namespace discord {
-namespace dave {
-namespace mls {
+namespace discord::dave::mls {
 
 ::mlspp::CipherSuite::ID CiphersuiteIDForProtocolVersion(
   [[maybe_unused]] ProtocolVersion version) noexcept
@@ -55,6 +53,4 @@ namespace mls {
     return extensionList;
 }
 
-} // namespace mls
-} // namespace dave
-} // namespace discord
+} // namespace discord::dave::mls

@@ -4,9 +4,7 @@
 
 #include "dave_interfaces.h"
 
-namespace discord {
-namespace dave {
-namespace test {
+namespace discord::dave::test {
 
 EncryptionKey MakeStaticSenderKey(const std::string& userID);
 EncryptionKey MakeStaticSenderKey(uint64_t u64userID);
@@ -23,6 +21,4 @@ private:
     uint64_t u64userID_;
 };
 
-} // namespace test
-} // namespace dave
-} // namespace discord
+} // namespace discord::dave::test

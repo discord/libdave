@@ -4,8 +4,6 @@
 
 #include "common.h"
 
-namespace discord {
-namespace dave {
+namespace discord::dave {
 
-} // namespace dave
-} // namespace discord
+} // namespace discord::dave

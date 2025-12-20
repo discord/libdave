@@ -7,9 +7,7 @@
 #include "dave/common.h"
 #include "dave/logger.h"
 
-namespace discord {
-namespace dave {
-namespace test {
+namespace discord::dave::test {
 
 EncryptionKey MakeStaticSenderKey(const std::string& userID)
 {
@@ -44,6 +42,4 @@ void StaticKeyRatchet::DeleteKey([[maybe_unused]] KeyGeneration generation) noex
     // noop
 }
 
-} // namespace test
-} // namespace dave
-} // namespace discord
+} // namespace discord::dave::test

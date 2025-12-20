@@ -15,8 +15,7 @@
 #include <intrin.h>
 #endif
 
-namespace discord {
-namespace dave {
+namespace discord::dave {
 
 std::pair<bool, size_t> OverflowAdd(size_t a, size_t b)
 {
@@ -398,5 +397,4 @@ void OutboundFrameProcessor::AddEncryptedBytes(const uint8_t* bytes, size_t size
     frameIndex_ += size;
 }
 
-} // namespace dave
-} // namespace discord
+} // namespace discord::dave

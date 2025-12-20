@@ -7,10 +7,7 @@
 
 #include "dave/mls/persisted_key_pair.h"
 
-namespace discord {
-namespace dave {
-namespace mls {
-namespace detail {
+namespace discord::dave::mls::detail {
 
 std::shared_ptr<::mlspp::SignaturePrivateKey> GetNativePersistedKeyPair(KeyPairContextType ctx,
                                                                         const std::string& keyID,
@@ -24,7 +21,4 @@ std::shared_ptr<::mlspp::SignaturePrivateKey> GetGenericPersistedKeyPair(
 bool DeleteNativePersistedKeyPair(KeyPairContextType ctx, const std::string& keyID);
 bool DeleteGenericPersistedKeyPair(KeyPairContextType ctx, const std::string& keyID);
 
-} // namespace detail
-} // namespace mls
-} // namespace dave
-} // namespace discord
+} // namespace discord::dave::mls::detail
