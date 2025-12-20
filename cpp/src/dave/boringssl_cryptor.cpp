@@ -7,8 +7,7 @@
 #include "dave/common.h"
 #include "dave/logger.h"
 
-namespace discord {
-namespace dave {
+namespace discord::dave {
 
 void PrintSSLErrors()
 {
@@ -100,5 +99,4 @@ bool BoringSSLCryptor::Decrypt(ArrayView<uint8_t> plaintextBufferOut,
     return decryptResult == 1;
 }
 
-} // namespace dave
-} // namespace discord
+} // namespace discord::dave

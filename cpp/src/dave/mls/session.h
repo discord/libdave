@@ -26,9 +26,7 @@ struct SignaturePrivateKey;
 class State;
 } // namespace mlspp
 
-namespace discord {
-namespace dave {
-namespace mls {
+namespace discord::dave::mls {
 
 struct QueuedProposal;
 
@@ -134,6 +132,4 @@ private:
     MLSFailureCallback onMLSFailureCallback_{};
 };
 
-} // namespace mls
-} // namespace dave
-} // namespace discord
+} // namespace discord::dave::mls

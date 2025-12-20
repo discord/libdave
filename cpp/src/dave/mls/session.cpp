@@ -25,9 +25,7 @@
         onMLSFailureCallback_(__FUNCTION__, reason); \
     }
 
-namespace discord {
-namespace dave {
-namespace mls {
+namespace discord::dave::mls {
 
 struct QueuedProposal {
     ::mlspp::ValidatedContent content;
@@ -820,6 +818,4 @@ void Session::ClearPendingState()
     proposalQueue_.clear();
 }
 
-} // namespace mls
-} // namespace dave
-} // namespace discord
+} // namespace discord::dave::mls

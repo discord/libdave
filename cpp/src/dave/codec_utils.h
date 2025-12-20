@@ -5,9 +5,7 @@
 #include "common.h"
 #include "dave/frame_processors.h"
 
-namespace discord {
-namespace dave {
-namespace codec_utils {
+namespace discord::dave::codec_utils {
 
 bool ProcessFrameOpus(OutboundFrameProcessor& processor, ArrayView<const uint8_t> frame);
 bool ProcessFrameVp8(OutboundFrameProcessor& processor, ArrayView<const uint8_t> frame);
@@ -18,6 +16,4 @@ bool ProcessFrameAv1(OutboundFrameProcessor& processor, ArrayView<const uint8_t>
 
 bool ValidateEncryptedFrame(OutboundFrameProcessor& processor, ArrayView<uint8_t> frame);
 
-} // namespace codec_utils
-} // namespace dave
-} // namespace discord
+} // namespace discord::dave::codec_utils

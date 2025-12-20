@@ -2,13 +2,11 @@
 
 #include <stdint.h>
 
-namespace discord {
-namespace dave {
+namespace discord::dave {
 
 using ProtocolVersion = uint16_t;
 using SignatureVersion = uint8_t;
 
 ProtocolVersion MaxSupportedProtocolVersion();
 
-} // namespace dave
-} // namespace discord
+} // namespace discord::dave

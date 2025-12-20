@@ -3,9 +3,7 @@
 
 #include "dave/common.h"
 
-namespace discord {
-namespace dave {
-namespace test {
+namespace discord::dave::test {
 
 std::vector<uint8_t> GetBufferFromHex(const std::string_view& hex);
 
@@ -16,6 +14,4 @@ public:
     void TearDown() override {}
 };
 
-} // namespace test
-} // namespace dave
-} // namespace discord
+} // namespace discord::dave::test

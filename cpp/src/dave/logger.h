@@ -8,8 +8,7 @@
 #define DISCORD_LOG_FILE_LINE(sev, file, line) ::discord::dave::LogStreamer(sev, file, line)
 #define DISCORD_LOG(sev) DISCORD_LOG_FILE_LINE(::discord::dave::sev, __FILE__, __LINE__)
 #endif
-namespace discord {
-namespace dave {
+namespace discord::dave {
 
 using LogSink = void (*)(LoggingSeverity severity,
                          const char* file,
@@ -36,5 +35,4 @@ private:
     std::ostringstream stream_;
 };
 
-} // namespace dave
-} // namespace discord
+} // namespace discord::dave

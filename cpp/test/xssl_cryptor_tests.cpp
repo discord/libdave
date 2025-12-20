@@ -11,9 +11,7 @@
 #include "dave_test.h"
 #include "static_key_ratchet.h"
 
-namespace discord {
-namespace dave {
-namespace test {
+namespace discord::dave::test {
 
 #ifdef WITH_BORINGSSL
 using CryptorVariant = BoringSSLCryptor;
@@ -159,6 +157,4 @@ TEST_F(DaveTests, XSSLNonceDiff)
     EXPECT_FALSE(memcmp(ciphertextBuffer1.data(), ciphertextBuffer2.data(), PLAINTEXT_SIZE) == 0);
 }
 
-} // namespace test
-} // namespace dave
-} // namespace discord
+} // namespace discord::dave::test

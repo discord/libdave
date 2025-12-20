@@ -4,8 +4,7 @@
 
 #include "dave/cryptor.h"
 
-namespace discord {
-namespace dave {
+namespace discord::dave {
 
 class BoringSSLCryptor : public ICryptor {
 public:
@@ -29,5 +28,4 @@ private:
     EVP_AEAD_CTX cipherCtx_;
 };
 
-} // namespace dave
-} // namespace discord
+} // namespace discord::dave

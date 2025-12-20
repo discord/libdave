@@ -1,8 +1,6 @@
 #include "util.h"
 
-namespace discord {
-namespace dave {
-namespace mls {
+namespace discord::dave::mls {
 
 ::mlspp::bytes_ns::bytes BigEndianBytesFrom(uint64_t value) noexcept
 {
@@ -29,6 +27,4 @@ uint64_t FromBigEndianBytes(const ::mlspp::bytes_ns::bytes& buffer) noexcept
     return val;
 }
 
-} // namespace mls
-} // namespace dave
-} // namespace discord
+} // namespace discord::dave::mls

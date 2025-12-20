@@ -21,8 +21,7 @@
 
 using namespace emscripten;
 
-namespace discord {
-namespace dave {
+namespace discord::dave {
 
 val ToOwnedTypedArray(const uint8_t* data, size_t size)
 {
@@ -314,8 +313,7 @@ private:
     std::unique_ptr<Decryptor> decryptor_;
 };
 
-} // namespace dave
-} // namespace discord
+} // namespace discord::dave
 
 EMSCRIPTEN_BINDINGS(dave)
 {

@@ -2,8 +2,7 @@
 
 #include <chrono>
 
-namespace discord {
-namespace dave {
+namespace discord::dave {
 
 class IClock {
 public:
@@ -20,5 +19,4 @@ public:
     TimePoint Now() const override { return BaseClock::now(); }
 };
 
-} // namespace dave
-} // namespace discord
+} // namespace discord::dave

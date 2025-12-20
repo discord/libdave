@@ -6,8 +6,7 @@
 
 #include "dave_interfaces.h"
 
-namespace discord {
-namespace dave {
+namespace discord::dave {
 
 class ICryptor {
 public:
@@ -27,5 +26,4 @@ public:
 
 std::unique_ptr<ICryptor> CreateCryptor(const EncryptionKey& encryptionKey);
 
-} // namespace dave
-} // namespace discord
+} // namespace discord::dave

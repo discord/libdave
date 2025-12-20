@@ -10,8 +10,7 @@
 #include "common.h"
 #include "dave_interfaces.h"
 
-namespace discord {
-namespace dave {
+namespace discord::dave {
 
 struct Range {
     size_t offset;
@@ -87,5 +86,4 @@ private:
     Ranges unencryptedRanges_;
 };
 
-} // namespace dave
-} // namespace discord
+} // namespace discord::dave

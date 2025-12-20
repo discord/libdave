@@ -7,8 +7,7 @@
 #include "dave/common.h"
 #include "dave/logger.h"
 
-namespace discord {
-namespace dave {
+namespace discord::dave {
 
 void PrintSSLErrors()
 {
@@ -173,5 +172,4 @@ bool OpenSSLCryptor::Decrypt(ArrayView<uint8_t> plaintextBufferOut,
     return true;
 }
 
-} // namespace dave
-} // namespace discord
+} // namespace discord::dave

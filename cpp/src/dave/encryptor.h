@@ -16,8 +16,7 @@
 #include "dave/frame_processors.h"
 #include "dave/version.h"
 
-namespace discord {
-namespace dave {
+namespace discord::dave {
 
 class Encryptor final : public IEncryptor {
 public:
@@ -82,5 +81,4 @@ private:
     ProtocolVersion currentProtocolVersion_{MaxSupportedProtocolVersion()};
 };
 
-} // namespace dave
-} // namespace discord
+} // namespace discord::dave

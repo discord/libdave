@@ -10,8 +10,7 @@
 
 #include "version.h"
 
-namespace discord {
-namespace dave {
+namespace discord::dave {
 
 using UnencryptedFrameHeaderSize = uint16_t;
 using TruncatedSyncNonce = uint32_t;
@@ -64,5 +63,4 @@ inline std::optional<T> GetOptional(V&& variant)
     }
 }
 
-} // namespace dave
-} // namespace discord
+} // namespace discord::dave

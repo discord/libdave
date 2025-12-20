@@ -6,8 +6,7 @@
 
 #include "dave/cryptor.h"
 
-namespace discord {
-namespace dave {
+namespace discord::dave {
 
 class OpenSSLCryptor : public ICryptor {
 public:
@@ -32,5 +31,4 @@ private:
     EncryptionKey encryptionKey_;
 };
 
-} // namespace dave
-} // namespace discord
+} // namespace discord::dave

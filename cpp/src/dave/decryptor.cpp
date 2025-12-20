@@ -11,8 +11,7 @@
 
 using namespace std::chrono_literals;
 
-namespace discord {
-namespace dave {
+namespace discord::dave {
 
 constexpr auto kStatsInterval = 10s;
 
@@ -239,5 +238,4 @@ void Decryptor::ReturnFrameProcessor(std::unique_ptr<InboundFrameProcessor> fram
     frameProcessors_.push_back(std::move(frameProcessor));
 }
 
-} // namespace dave
-} // namespace discord
+} // namespace discord::dave

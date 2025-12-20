@@ -6,8 +6,7 @@
 #include "openssl_cryptor.h"
 #endif
 
-namespace discord {
-namespace dave {
+namespace discord::dave {
 
 std::unique_ptr<ICryptor> CreateCryptor(const EncryptionKey& encryptionKey)
 {
@@ -20,5 +19,4 @@ std::unique_ptr<ICryptor> CreateCryptor(const EncryptionKey& encryptionKey)
     return cryptor->IsValid() ? std::move(cryptor) : nullptr;
 }
 
-} // namespace dave
-} // namespace discord
+} // namespace discord::dave

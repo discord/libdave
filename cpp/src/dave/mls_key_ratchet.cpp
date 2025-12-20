@@ -5,8 +5,7 @@
 #include "dave/common.h"
 #include "dave/logger.h"
 
-namespace discord {
-namespace dave {
+namespace discord::dave {
 
 MlsKeyRatchet::MlsKeyRatchet(::mlspp::CipherSuite suite, bytes baseSecret) noexcept
   : hashRatchet_(suite, std::move(baseSecret))
@@ -36,5 +35,4 @@ void MlsKeyRatchet::DeleteKey(KeyGeneration generation) noexcept
     hashRatchet_.erase(generation);
 }
 
-} // namespace dave
-} // namespace discord
+} // namespace discord::dave

@@ -8,9 +8,7 @@
 #include "logger.h"
 #include "utils/leb128.h"
 
-namespace discord {
-namespace dave {
-namespace codec_utils {
+namespace discord::dave::codec_utils {
 
 UnencryptedFrameHeaderSize BytesCoveringH264PPS(const uint8_t* payload,
                                                 const uint64_t sizeRemaining)
@@ -439,6 +437,4 @@ bool ValidateEncryptedFrame(OutboundFrameProcessor& processor, ArrayView<uint8_t
     return true;
 }
 
-} // namespace codec_utils
-} // namespace dave
-} // namespace discord
+} // namespace discord::dave::codec_utils

@@ -3,8 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 
-namespace discord {
-namespace dave {
+namespace discord::dave {
 
 constexpr size_t Leb128MaxSize = 10;
 
@@ -19,5 +18,4 @@ uint64_t ReadLeb128(const uint8_t*& readAt, const uint8_t* end);
 // Leb128Size(value). Returns number of bytes consumed.
 size_t WriteLeb128(uint64_t value, uint8_t* buffer);
 
-} // namespace dave
-} // namespace discord
+} // namespace discord::dave
