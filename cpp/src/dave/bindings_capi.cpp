@@ -82,12 +82,13 @@ uint16_t daveMaxSupportedProtocolVersion(void)
 
 DAVESessionHandle daveSessionCreate(void* context,
                                     const char* authSessionId,
-                                    DAVEMLSFailureCallback callback)
+                                    DAVEMLSFailureCallback callback,
+                                    void* userData)
 {
     discord::dave::mls::MLSFailureCallback mlsFailureCallback;
     if (callback != nullptr) {
-        mlsFailureCallback = [callback](std::string source, std::string reason) {
-            callback(source.c_str(), reason.c_str());
+        mlsFailureCallback = [callback, userData](std::string source, std::string reason) {
+            callback(source.c_str(), reason.c_str(), userData);
         };
     };
 
@@ -235,14 +236,15 @@ DAVEKeyRatchetHandle daveSessionGetKeyRatchet(DAVESessionHandle sessionHandle, c
 void daveSessionGetPairwiseFingerprint(DAVESessionHandle sessionHandle,
                                        uint16_t version,
                                        const char* userId,
-                                       DAVEPairwiseFingerprintCallback callback)
+                                       DAVEPairwiseFingerprintCallback callback,
+                                       void* userData)
 {
     ARG_CHECK(sessionHandle);
     auto session = reinterpret_cast<discord::dave::mls::ISession*>(sessionHandle);
     auto userIdStr = userId ? std::string(userId) : std::string();
     session->GetPairwiseFingerprint(
-      version, userIdStr, [callback](std::vector<uint8_t> const& fingerprint) {
-          callback(fingerprint.data(), fingerprint.size());
+      version, userIdStr, [callback, userData](std::vector<uint8_t> const& fingerprint) {
+          callback(fingerprint.data(), fingerprint.size(), userData);
       });
 }
 
@@ -404,11 +406,12 @@ DAVEEncryptorResultCode daveEncryptorEncrypt(DAVEEncryptorHandle encryptorHandle
 
 void daveEncryptorSetProtocolVersionChangedCallback(
   DAVEEncryptorHandle encryptorHandle,
-  DAVEEncryptorProtocolVersionChangedCallback callback)
+  DAVEEncryptorProtocolVersionChangedCallback callback,
+  void* userData)
 {
     ARG_CHECK(encryptorHandle);
     auto encryptor = reinterpret_cast<discord::dave::IEncryptor*>(encryptorHandle);
-    encryptor->SetProtocolVersionChangedCallback([callback]() { callback(); });
+    encryptor->SetProtocolVersionChangedCallback([callback, userData]() { callback(userData); });
 }
 
 void daveEncryptorGetStats(DAVEEncryptorHandle encryptorHandle,

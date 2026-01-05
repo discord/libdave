@@ -267,39 +267,59 @@ static int TestPassthroughTwoBuffers(void)
     return 1;
 }
 
-static void TestSessionFailureCallback(const char* source, const char* reason)
+static void TestSessionFailureCallback(const char* source, const char* reason, void* userData)
 {
+    (void)userData;
     printf("Session failure: %s: %s\n", source, reason);
 }
 
-static pthread_mutex_t pairwiseFingerprintMutex = PTHREAD_MUTEX_INITIALIZER;
-static uint8_t* lastPairwiseFingerprint = NULL;
-static size_t lastPairwiseFingerprintLength = 0;
-static bool pairwiseFingerprintDidCompare = false;
-static bool pairwiseFingerprintMatch = false;
+typedef struct {
+    pthread_mutex_t mutex;
+    pthread_cond_t cond;
+    uint8_t* pairwiseFingerprint;
+    size_t pairwiseFingerprintLength;
+} PairwiseFingerprintData;
+
+static void PairwiseFingerprintDataInit(PairwiseFingerprintData* data)
+{
+    pthread_mutex_init(&data->mutex, NULL);
+    pthread_cond_init(&data->cond, NULL);
+    data->pairwiseFingerprint = NULL;
+    data->pairwiseFingerprintLength = 0;
+}
+
+static void PairwiseFingerprintDataDestroy(PairwiseFingerprintData* data)
+{
+    pthread_mutex_destroy(&data->mutex);
+    pthread_cond_destroy(&data->cond);
+    free(data->pairwiseFingerprint);
+    data->pairwiseFingerprint = NULL;
+    data->pairwiseFingerprintLength = 0;
+}
+
+static void PairwiseFingerprintDataWait(PairwiseFingerprintData* data)
+{
+    pthread_mutex_lock(&data->mutex);
+    if (data->pairwiseFingerprint == NULL) {
+        pthread_cond_wait(&data->cond, &data->mutex);
+    }
+    pthread_mutex_unlock(&data->mutex);
+}
 
 static void PairwiseFingerprintCallback(const uint8_t* pairwiseFingerprint,
-                                        size_t pairwiseFingerprintLength)
+                                        size_t pairwiseFingerprintLength,
+                                        void* userData)
 {
-    pthread_mutex_lock(&pairwiseFingerprintMutex);
-    if (lastPairwiseFingerprint == NULL) {
-        lastPairwiseFingerprint = (uint8_t*)malloc(pairwiseFingerprintLength);
-        memcpy(lastPairwiseFingerprint, pairwiseFingerprint, pairwiseFingerprintLength);
-        lastPairwiseFingerprintLength = pairwiseFingerprintLength;
+    if (userData == NULL) {
+        return;
     }
-    else {
-        bool match = lastPairwiseFingerprintLength == pairwiseFingerprintLength;
-        if (match) {
-            match =
-              memcmp(lastPairwiseFingerprint, pairwiseFingerprint, pairwiseFingerprintLength) == 0;
-        }
-        free(lastPairwiseFingerprint);
-        lastPairwiseFingerprint = NULL;
-
-        pairwiseFingerprintMatch = match;
-        pairwiseFingerprintDidCompare = true;
-    }
-    pthread_mutex_unlock(&pairwiseFingerprintMutex);
+    PairwiseFingerprintData* data = (PairwiseFingerprintData*)userData;
+    pthread_mutex_lock(&data->mutex);
+    data->pairwiseFingerprint = (uint8_t*)malloc(pairwiseFingerprintLength);
+    memcpy(data->pairwiseFingerprint, pairwiseFingerprint, pairwiseFingerprintLength);
+    data->pairwiseFingerprintLength = pairwiseFingerprintLength;
+    pthread_cond_signal(&data->cond);
+    pthread_mutex_unlock(&data->mutex);
 }
 
 static int TestSession(void)
@@ -314,8 +334,8 @@ static int TestSession(void)
 
     // Create sessions
     printf("Creating sessions\n");
-    DAVESessionHandle sessionA = daveSessionCreate(NULL, NULL, TestSessionFailureCallback);
-    DAVESessionHandle sessionB = daveSessionCreate(NULL, NULL, TestSessionFailureCallback);
+    DAVESessionHandle sessionA = daveSessionCreate(NULL, NULL, TestSessionFailureCallback, NULL);
+    DAVESessionHandle sessionB = daveSessionCreate(NULL, NULL, TestSessionFailureCallback, NULL);
     TEST_ASSERT(sessionA != NULL, "Failed to create session");
     TEST_ASSERT(sessionB != NULL, "Failed to create session");
 
@@ -462,19 +482,25 @@ static int TestSession(void)
 
     // Get pairwise fingerprints
     printf("Matching pairwise fingerprints\n");
-    daveSessionGetPairwiseFingerprint(sessionA, 1, userB, &PairwiseFingerprintCallback);
-    daveSessionGetPairwiseFingerprint(sessionB, 1, userA, &PairwiseFingerprintCallback);
-    while (true) {
-        sleep(1); // TODO: Use wait condition instead of sleep
-        pthread_mutex_lock(&pairwiseFingerprintMutex);
-        bool didCompare = pairwiseFingerprintDidCompare;
-        bool match = pairwiseFingerprintMatch;
-        pthread_mutex_unlock(&pairwiseFingerprintMutex);
-        if (didCompare) {
-            TEST_ASSERT(match, "Pairwise fingerprint should match");
-            break;
-        }
-    }
+    PairwiseFingerprintData pairwiseFingerprintDataA;
+    PairwiseFingerprintDataInit(&pairwiseFingerprintDataA);
+    PairwiseFingerprintData pairwiseFingerprintDataB;
+    PairwiseFingerprintDataInit(&pairwiseFingerprintDataB);
+    daveSessionGetPairwiseFingerprint(
+      sessionA, 1, userB, &PairwiseFingerprintCallback, &pairwiseFingerprintDataA);
+    daveSessionGetPairwiseFingerprint(
+      sessionB, 1, userA, &PairwiseFingerprintCallback, &pairwiseFingerprintDataB);
+    PairwiseFingerprintDataWait(&pairwiseFingerprintDataA);
+    PairwiseFingerprintDataWait(&pairwiseFingerprintDataB);
+    TEST_ASSERT(pairwiseFingerprintDataA.pairwiseFingerprintLength ==
+                  pairwiseFingerprintDataB.pairwiseFingerprintLength,
+                "Pairwise fingerprint lengths should match");
+    TEST_ASSERT(memcmp(pairwiseFingerprintDataA.pairwiseFingerprint,
+                       pairwiseFingerprintDataB.pairwiseFingerprint,
+                       pairwiseFingerprintDataA.pairwiseFingerprintLength) == 0,
+                "Pairwise fingerprint should match");
+    PairwiseFingerprintDataDestroy(&pairwiseFingerprintDataA);
+    PairwiseFingerprintDataDestroy(&pairwiseFingerprintDataB);
 
     // Get key ratchets
     printf("Getting key ratchets\n");

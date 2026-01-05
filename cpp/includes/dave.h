@@ -58,9 +58,9 @@ typedef enum {
     DAVE_LOGGING_SEVERITY_NONE = 4,
 } DAVELoggingSeverity;
 
-typedef void (*DAVEMLSFailureCallback)(const char* source, const char* reason);
-typedef void (*DAVEPairwiseFingerprintCallback)(const uint8_t* fingerprint, size_t length);
-typedef void (*DAVEEncryptorProtocolVersionChangedCallback)(void);
+typedef void (*DAVEMLSFailureCallback)(const char* source, const char* reason, void* userData);
+typedef void (*DAVEPairwiseFingerprintCallback)(const uint8_t* fingerprint, size_t length, void* userData);
+typedef void (*DAVEEncryptorProtocolVersionChangedCallback)(void* userData);
 typedef void (*DAVELogSinkCallback)(DAVELoggingSeverity severity,
                                     const char* file,
                                     int line,
@@ -90,7 +90,8 @@ DAVE_EXPORT uint16_t daveMaxSupportedProtocolVersion(void);
 
 DAVE_EXPORT DAVESessionHandle daveSessionCreate(void* context,
                                                 const char* authSessionId,
-                                                DAVEMLSFailureCallback callback);
+                                                DAVEMLSFailureCallback callback,
+                                                void* userData);
 DAVE_EXPORT void daveSessionDestroy(DAVESessionHandle session);
 DAVE_EXPORT void daveSessionInit(DAVESessionHandle session,
                                  uint16_t version,
@@ -128,7 +129,8 @@ DAVE_EXPORT DAVEKeyRatchetHandle daveSessionGetKeyRatchet(DAVESessionHandle sess
 DAVE_EXPORT void daveSessionGetPairwiseFingerprint(DAVESessionHandle session,
                                                    uint16_t version,
                                                    const char* userId,
-                                                   DAVEPairwiseFingerprintCallback callback);
+                                                   DAVEPairwiseFingerprintCallback callback,
+                                                   void* userData);
 
 
 DAVE_EXPORT void daveKeyRatchetDestroy(DAVEKeyRatchetHandle keyRatchet);
@@ -169,7 +171,8 @@ DAVE_EXPORT DAVEEncryptorResultCode daveEncryptorEncrypt(DAVEEncryptorHandle enc
                                                 size_t* bytesWritten);
 DAVE_EXPORT void daveEncryptorSetProtocolVersionChangedCallback(
   DAVEEncryptorHandle encryptor,
-  DAVEEncryptorProtocolVersionChangedCallback callback);
+  DAVEEncryptorProtocolVersionChangedCallback callback,
+  void* userData);
 DAVE_EXPORT void daveEncryptorGetStats(DAVEEncryptorHandle encryptor,
                                        DAVEMediaType mediaType,
                                        DAVEEncryptorStats* stats);
