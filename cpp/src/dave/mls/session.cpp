@@ -69,7 +69,12 @@ void Session::Init(ProtocolVersion protocolVersion,
 
     InitLeafNode(selfUserId, transientKey);
 
-    CreatePendingGroup();
+    if (externalSender_) {
+        CreatePendingGroup();
+    }
+    else {
+        DISCORD_LOG(LS_INFO) << "Waiting for external sender to create a pending group";
+    }
 }
 
 void Session::Reset() noexcept
@@ -121,6 +126,9 @@ try {
 
     if (!groupId_.empty()) {
         CreatePendingGroup();
+    }
+    else {
+        DISCORD_LOG(LS_INFO) << "Waiting for group ID to create a pending group";
     }
 }
 catch (const std::exception& e) {
