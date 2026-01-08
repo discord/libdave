@@ -129,8 +129,8 @@ static std::string ErrorToString(CFErrorRef error)
     }
 
     if (__builtin_available(macOS 10.3, iOS 11.3, *)) {
-        OSStatus status = CFErrorGetCode(error);
-        ScopedCFTypeRef string = SecCopyErrorMessageString(status, NULL);
+        CFIndex status = CFErrorGetCode(error);
+        ScopedCFTypeRef string = CFErrorCopyFailureReason(error);
         if (string) {
             std::string ret = std::to_string(status);
 
