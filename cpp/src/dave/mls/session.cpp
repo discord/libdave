@@ -6,12 +6,12 @@
 
 #include <hpke/random.h>
 #include <hpke/signature.h>
+#include <logger.h>
 #include <mls/crypto.h>
 #include <mls/messages.h>
 #include <mls/state.h>
 
 #include "dave/common.h"
-#include "dave/logger.h"
 #include "dave/mls/parameters.h"
 #include "dave/mls/persisted_key_pair.h"
 #include "dave/mls/user_credential.h"

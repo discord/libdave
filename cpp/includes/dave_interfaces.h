@@ -12,6 +12,7 @@
 
 #include <array_view.h>
 #include <dave.h>
+#include <version.h>
 
 namespace mlspp {
 namespace bytes_ns {
@@ -27,7 +28,6 @@ namespace dave {
 
 using EncryptorStats = DAVEEncryptorStats;
 using DecryptorStats = DAVEDecryptorStats;
-using ProtocolVersion = uint16_t;
 using KeyGeneration = uint32_t;
 using EncryptionKey = ::mlspp::bytes_ns::bytes;
 
@@ -113,9 +113,9 @@ public:
 };
 
 using MLSFailureCallback = std::function<void(std::string const&, std::string const&)>;
-std::unique_ptr<ISession> CreateSession(KeyPairContextType context,
-                                        std::string authSessionId,
-                                        MLSFailureCallback callback) noexcept;
+DAVE_EXPORT std::unique_ptr<ISession> CreateSession(KeyPairContextType context,
+                                                    std::string authSessionId,
+                                                    MLSFailureCallback callback) noexcept;
 
 } // namespace mls
 
@@ -152,7 +152,7 @@ public:
     virtual ProtocolVersion GetProtocolVersion() const = 0;
 };
 
-std::unique_ptr<IEncryptor> CreateEncryptor();
+DAVE_EXPORT std::unique_ptr<IEncryptor> CreateEncryptor();
 
 class IDecryptor {
 public:
@@ -182,7 +182,7 @@ public:
     virtual DecryptorStats GetStats(MediaType mediaType) const = 0;
 };
 
-std::unique_ptr<IDecryptor> CreateDecryptor();
+DAVE_EXPORT std::unique_ptr<IDecryptor> CreateDecryptor();
 
 static_assert(DAVE_CODEC_UNKNOWN == static_cast<int>(Codec::Unknown));
 static_assert(DAVE_CODEC_OPUS == static_cast<int>(Codec::Opus));

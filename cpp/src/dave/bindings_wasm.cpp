@@ -10,14 +10,15 @@
 #include <mls/crypto.h>
 #include <mls/key_schedule.h>
 
+#include <logger.h>
+#include <version.h>
+
 #include "dave/common.h"
 #include "dave/decryptor.h"
 #include "dave/encryptor.h"
-#include "dave/logger.h"
 #include "dave/mls/parameters.h"
 #include "dave/mls/session.h"
 #include "dave/mls_key_ratchet.h"
-#include "dave/version.h"
 
 using namespace emscripten;
 

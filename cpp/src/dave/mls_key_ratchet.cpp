@@ -2,8 +2,9 @@
 
 #include <cassert>
 
+#include <logger.h>
+
 #include "dave/common.h"
-#include "dave/logger.h"
 
 namespace discord {
 namespace dave {

@@ -3,8 +3,9 @@
 #include <cstring>
 #include <vector>
 
+#include <version.h>
+
 #include "../external_sender.h"
-#include "dave/version.h"
 
 void CopyVectorToOutputBuffer(std::vector<uint8_t> const& vector, uint8_t** data, size_t* length)
 {

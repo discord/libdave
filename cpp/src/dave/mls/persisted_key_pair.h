@@ -9,8 +9,7 @@
 #endif
 
 #include <dave_interfaces.h>
-
-#include "dave/version.h"
+#include <version.h>
 
 namespace mlspp {
 struct SignaturePrivateKey;

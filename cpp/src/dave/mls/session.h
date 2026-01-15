@@ -9,10 +9,10 @@
 #include <vector>
 
 #include <dave_interfaces.h>
+#include <version.h>
 
 #include "dave/mls/persisted_key_pair.h"
 #include "dave/mls_key_ratchet.h"
-#include "dave/version.h"
 
 namespace mlspp {
 struct AuthenticatedContent;

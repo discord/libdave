@@ -5,12 +5,12 @@
 
 #include <array_view.h>
 #include <bytes/bytes.h>
+#include <logger.h>
 
 #include "common.h"
 #include "dave/codec_utils.h"
 #include "dave/common.h"
 #include "dave/cryptor_manager.h"
-#include "dave/logger.h"
 #include "dave/utils/leb128.h"
 #include "dave/utils/scope_exit.h"
 

@@ -9,12 +9,12 @@
 #include <vector>
 
 #include <dave_interfaces.h>
+#include <version.h>
 
 #include "dave/codec_utils.h"
 #include "dave/common.h"
 #include "dave/cryptor.h"
 #include "dave/frame_processors.h"
-#include "dave/version.h"
 
 namespace discord {
 namespace dave {

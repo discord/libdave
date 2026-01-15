@@ -18,9 +18,9 @@
 #include <wincrypt.h>
 
 #include <bytes/bytes.h>
+#include <logger.h>
 #include <mls/crypto.h>
 
-#include "dave/logger.h"
 #include "dave/mls/parameters.h"
 
 static const std::string KeyTagPrefix = "discord-secure-frames-key-";

@@ -8,12 +8,12 @@
 #include <vector>
 
 #include <dave_interfaces.h>
+#include <version.h>
 
 #include "codec_utils.h"
 #include "common.h"
 #include "cryptor.h"
 #include "cryptor_manager.h"
-#include "dave/version.h"
 #include "frame_processors.h"
 #include "utils/clock.h"
 

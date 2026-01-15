@@ -6,9 +6,10 @@
 
 #include <mls/messages.h>
 
-#include "dave/logger.h"
+#include <logger.h>
+#include <version.h>
+
 #include "dave/mls_key_ratchet.h"
-#include "dave/version.h"
 
 #define ARG_CHECK(arg)                                \
     if (arg == nullptr) {                             \

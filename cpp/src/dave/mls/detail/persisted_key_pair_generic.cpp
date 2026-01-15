@@ -17,9 +17,9 @@
 #include <fcntl.h>
 
 #include <bytes/bytes.h>
+#include <logger.h>
 #include <mls/crypto.h>
 
-#include "dave/logger.h"
 #include "dave/mls/parameters.h"
 
 static const std::string_view KeyStorageDir = "Discord Key Storage";

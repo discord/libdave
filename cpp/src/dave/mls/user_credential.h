@@ -4,7 +4,7 @@
 
 #include <mls/credential.h>
 
-#include "dave/version.h"
+#include <version.h>
 
 namespace discord {
 namespace dave {

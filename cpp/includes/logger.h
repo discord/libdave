@@ -2,7 +2,7 @@
 
 #include <sstream>
 
-#include "dave_interfaces.h"
+#include <dave_interfaces.h>
 
 #if !defined(DISCORD_LOG)
 #define DISCORD_LOG_FILE_LINE(sev, file, line) ::discord::dave::LogStreamer(sev, file, line)
@@ -15,7 +15,7 @@ using LogSink = void (*)(LoggingSeverity severity,
                          const char* file,
                          int line,
                          const std::string& message);
-void SetLogSink(LogSink sink);
+DAVE_EXPORT void SetLogSink(LogSink sink);
 
 class LogStreamer {
 public:
