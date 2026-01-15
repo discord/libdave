@@ -120,9 +120,9 @@ typedef void (*DAVEEncryptorProtocolVersionChangedCallback)(void* userData);
 /**
  * @brief Custom log sink callback for receiving library log messages
  * @param severity Log severity level
- * @param file Source file name where log originated
+ * @param file Source file name where log originated (freed by the library after the callback returns)
  * @param line Line number in source file
- * @param message Log message text
+ * @param message Log message text (freed by the library after the callback returns)
  */
 typedef void (*DAVELogSinkCallback)(DAVELoggingSeverity severity,
                                     const char* file,
