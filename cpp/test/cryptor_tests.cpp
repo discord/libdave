@@ -1,8 +1,8 @@
 #include <gtest/gtest.h>
 
-#include "dave/decryptor.h"
-#include "dave/encryptor.h"
-#include "dave/frame_processors.h"
+#include "decryptor.h"
+#include "encryptor.h"
+#include "frame_processors.h"
 
 #include "dave_test.h"
 #include "static_key_ratchet.h"

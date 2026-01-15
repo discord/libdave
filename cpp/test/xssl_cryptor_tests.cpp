@@ -3,9 +3,9 @@
 #include <bytes/bytes.h>
 
 #ifdef WITH_BORINGSSL
-#include "dave/boringssl_cryptor.h"
+#include "boringssl_cryptor.h"
 #else
-#include "dave/openssl_cryptor.h"
+#include "openssl_cryptor.h"
 #endif
 
 #include "dave_test.h"

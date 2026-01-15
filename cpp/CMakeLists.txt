@@ -110,27 +110,27 @@ list(FILTER LIB_SOURCES EXCLUDE REGEX ".*persisted_key.*")
 
 if (PERSISTENT_KEYS)
   # persistent keys enabled
-  list(APPEND LIB_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/dave/mls/persisted_key_pair.cpp")
+  list(APPEND LIB_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/mls/persisted_key_pair.cpp")
 
   if (APPLE)
     # Apple has its own native and generic implementation, we just add the _apple.cpp file
-    list(APPEND LIB_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/dave/mls/detail/persisted_key_pair_apple.cpp")
+    list(APPEND LIB_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/mls/detail/persisted_key_pair_apple.cpp")
   else ()
     # Other platforms share the generic implementation
-    list(APPEND LIB_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/dave/mls/detail/persisted_key_pair_generic.cpp")
+    list(APPEND LIB_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/mls/detail/persisted_key_pair_generic.cpp")
 
     if (WIN32)
       # Windows has a native implementation
-      list(APPEND LIB_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/dave/mls/detail/persisted_key_pair_win.cpp")
+      list(APPEND LIB_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/mls/detail/persisted_key_pair_win.cpp")
     else ()
       # We don't have a native implementation, so we include the nullified native
-      list(APPEND LIB_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/dave/mls/detail/persisted_key_pair_null.cpp")
+      list(APPEND LIB_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/mls/detail/persisted_key_pair_null.cpp")
     endif ()
   endif ()
   
 else ()
   # not using persistent keys, so we just need to add the null implementation
-  list (APPEND LIB_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/dave/mls/persisted_key_pair_null.cpp")
+  list (APPEND LIB_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/mls/persisted_key_pair_null.cpp")
 endif ()
 
 if (NOT WIN32)

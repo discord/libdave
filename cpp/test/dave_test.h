@@ -1,7 +1,7 @@
 
 #include "gtest/gtest.h"
 
-#include "dave/common.h"
+#include "common.h"
 
 namespace discord {
 namespace dave {

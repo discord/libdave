@@ -6,9 +6,9 @@
 
 #include <fuzzer/FuzzedDataProvider.h>
 
-#include "dave/common.h"
-#include "dave/utils/array_view.h"
-#include "dave/decryptor.h"
+#include "common.h"
+#include "utils/array_view.h"
+#include "decryptor.h"
 
 using namespace discord::dave;
 

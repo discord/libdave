@@ -4,9 +4,9 @@
 #include <bytes/bytes.h>
 #include <limits>
 
-#include "dave/common.h"
-#include "dave/cryptor_manager.h"
-#include "dave/utils/clock.h"
+#include "common.h"
+#include "cryptor_manager.h"
+#include "utils/clock.h"
 
 #include "dave_test.h"
 #include "static_key_ratchet.h"

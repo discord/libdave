@@ -3,7 +3,7 @@
 #include <cstring>
 #include <vector>
 
-#include <version.h>
+#include <dave/version.h>
 
 #include "../external_sender.h"
 

@@ -2,7 +2,7 @@
 
 #include <string>
 
-#include "dave_interfaces.h"
+#include <dave/dave_interfaces.h>
 
 namespace discord {
 namespace dave {

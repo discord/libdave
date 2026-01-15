@@ -1,5 +1,5 @@
 
-#include "dave.h"
+#include <dave/dave.h>
 
 #ifdef __cplusplus
 extern "C" {

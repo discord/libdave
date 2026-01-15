@@ -1,7 +1,7 @@
 #include "external_sender.h"
 
-#include "dave/mls/parameters.h"
-#include "dave/mls/util.h"
+#include "mls/parameters.h"
+#include "mls/util.h"
 
 namespace discord {
 namespace dave {

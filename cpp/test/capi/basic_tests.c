@@ -14,7 +14,7 @@ typedef pthread_mutex_t mutex_t;
 typedef pthread_cond_t cond_t;
 #endif
 
-#include <dave.h>
+#include <dave/dave.h>
 
 #include "external_sender_wrapper.h"
 #include "test_helpers.h"

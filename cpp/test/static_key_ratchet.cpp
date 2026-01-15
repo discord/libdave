@@ -3,9 +3,9 @@
 #include <algorithm>
 
 #include <bytes/bytes.h>
-#include <logger.h>
+#include <dave/logger.h>
 
-#include "dave/common.h"
+#include "common.h"
 
 namespace discord {
 namespace dave {
