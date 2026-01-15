@@ -15,6 +15,15 @@ target_link_libraries(libdave_test PRIVATE ${LIB_NAME} GTest::gtest_main GTest::
 
 add_test(NAME ${TEST_APP_NAME} COMMAND ${TEST_APP_NAME})
 
+if(WIN32 AND ENABLE_SANITIZERS AND EXISTS "${ASAN_RUNTIME_DLL}")
+    add_custom_command(TARGET ${TEST_APP_NAME} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${ASAN_RUNTIME_DLL}"
+            $<TARGET_FILE_DIR:${TEST_APP_NAME}>
+        COMMENT "Copying ASAN runtime DLL to test directory"
+    )
+endif()
+
 # Add C API tests if shared library is built
 if (BUILD_SHARED_LIBS)
     add_subdirectory(capi)

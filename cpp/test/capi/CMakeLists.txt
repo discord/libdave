@@ -27,4 +27,21 @@ set_target_properties(${TEST_APP_NAME} PROPERTIES LINKER_LANGUAGE C)
 
 target_link_libraries(${TEST_APP_NAME} PRIVATE ${LIB_NAME} ${EXTERNAL_SENDER_WRAPPER_LIB})
 
+if(WIN32)
+    add_custom_command(TARGET ${TEST_APP_NAME} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            $<TARGET_FILE:${LIB_NAME}>
+            $<TARGET_FILE_DIR:${TEST_APP_NAME}>
+        COMMENT "Copying ${LIB_NAME}.dll to test directory"
+    )
+    if(ENABLE_SANITIZERS AND EXISTS "${ASAN_RUNTIME_DLL}")
+        add_custom_command(TARGET ${TEST_APP_NAME} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${ASAN_RUNTIME_DLL}"
+                $<TARGET_FILE_DIR:${TEST_APP_NAME}>
+            COMMENT "Copying ASAN runtime DLL to test directory"
+        )
+    endif()
+endif()
+
 add_test(NAME ${TEST_APP_NAME} COMMAND ${TEST_APP_NAME})

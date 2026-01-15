@@ -1,10 +1,20 @@
-#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-#include <dave.h>
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+typedef CRITICAL_SECTION mutex_t;
+typedef CONDITION_VARIABLE cond_t;
+#else
+#include <pthread.h>
 #include <unistd.h>
+typedef pthread_mutex_t mutex_t;
+typedef pthread_cond_t cond_t;
+#endif
+
+#include <dave.h>
 
 #include "external_sender_wrapper.h"
 #include "test_helpers.h"
@@ -274,24 +284,34 @@ static void TestSessionFailureCallback(const char* source, const char* reason, v
 }
 
 typedef struct {
-    pthread_mutex_t mutex;
-    pthread_cond_t cond;
+    mutex_t mutex;
+    cond_t cond;
     uint8_t* pairwiseFingerprint;
     size_t pairwiseFingerprintLength;
 } PairwiseFingerprintData;
 
 static void PairwiseFingerprintDataInit(PairwiseFingerprintData* data)
 {
+#ifdef _WIN32
+    InitializeCriticalSection(&data->mutex);
+    InitializeConditionVariable(&data->cond);
+#else
     pthread_mutex_init(&data->mutex, NULL);
     pthread_cond_init(&data->cond, NULL);
+#endif
     data->pairwiseFingerprint = NULL;
     data->pairwiseFingerprintLength = 0;
 }
 
 static void PairwiseFingerprintDataDestroy(PairwiseFingerprintData* data)
 {
+#ifdef _WIN32
+    DeleteCriticalSection(&data->mutex);
+    // CONDITION_VARIABLE does not need cleanup
+#else
     pthread_mutex_destroy(&data->mutex);
     pthread_cond_destroy(&data->cond);
+#endif
     free(data->pairwiseFingerprint);
     data->pairwiseFingerprint = NULL;
     data->pairwiseFingerprintLength = 0;
@@ -299,11 +319,19 @@ static void PairwiseFingerprintDataDestroy(PairwiseFingerprintData* data)
 
 static void PairwiseFingerprintDataWait(PairwiseFingerprintData* data)
 {
+#ifdef _WIN32
+    EnterCriticalSection(&data->mutex);
+    if (data->pairwiseFingerprint == NULL) {
+        SleepConditionVariableCS(&data->cond, &data->mutex, INFINITE);
+    }
+    LeaveCriticalSection(&data->mutex);
+#else
     pthread_mutex_lock(&data->mutex);
     if (data->pairwiseFingerprint == NULL) {
         pthread_cond_wait(&data->cond, &data->mutex);
     }
     pthread_mutex_unlock(&data->mutex);
+#endif
 }
 
 static void PairwiseFingerprintCallback(const uint8_t* pairwiseFingerprint,
@@ -314,12 +342,21 @@ static void PairwiseFingerprintCallback(const uint8_t* pairwiseFingerprint,
         return;
     }
     PairwiseFingerprintData* data = (PairwiseFingerprintData*)userData;
+#ifdef _WIN32
+    EnterCriticalSection(&data->mutex);
+    data->pairwiseFingerprint = (uint8_t*)malloc(pairwiseFingerprintLength);
+    memcpy(data->pairwiseFingerprint, pairwiseFingerprint, pairwiseFingerprintLength);
+    data->pairwiseFingerprintLength = pairwiseFingerprintLength;
+    WakeConditionVariable(&data->cond);
+    LeaveCriticalSection(&data->mutex);
+#else
     pthread_mutex_lock(&data->mutex);
     data->pairwiseFingerprint = (uint8_t*)malloc(pairwiseFingerprintLength);
     memcpy(data->pairwiseFingerprint, pairwiseFingerprint, pairwiseFingerprintLength);
     data->pairwiseFingerprintLength = pairwiseFingerprintLength;
     pthread_cond_signal(&data->cond);
     pthread_mutex_unlock(&data->mutex);
+#endif
 }
 
 static int TestSession(void)

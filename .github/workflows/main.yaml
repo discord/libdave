@@ -15,13 +15,9 @@ jobs:
   build:
     strategy:
       matrix:
-        runner: [ubuntu-latest, macos-latest]
+        runner: [ubuntu-latest, macos-latest, windows-latest]
         crypto: [boringssl]
-        persistent_keys: [ON, OFF]
       fail-fast: false
-
-    env:
-      CRYPTO_ALT_DIR: "./vcpkg-alts/${{ matrix.crypto }}"
 
     runs-on: ${{matrix.runner}}
 
@@ -41,30 +37,46 @@ jobs:
           crypto: ${{ matrix.crypto }}
           cache-dir: ${{ github.workspace }}/vcpkg_cache
 
-      - name: configure
-        run: >-
-          cmake -B "${{ runner.temp }}/build_${{ matrix.crypto }}" 
-          -DVCPKG_MANIFEST_DIR="${{ env.CRYPTO_ALT_DIR }}" 
-          -DPERSISTENT_KEYS=${{ matrix.persistent_keys }} 
-          -DTESTING=ON
-          -DBUILD_SHARED_LIBS=ON
-          -DENABLE_SANITIZERS=ON
-
-      - name: build
-        run: cmake --build "${{ runner.temp }}/build_${{ matrix.crypto }}"
-
-      - name: test
+      - name: test (macOS/Linux)
+        if: ${{ runner.os == 'macOS' || runner.os == 'Linux' }}
+        shell: bash
         run: |
-          ${{ runner.temp }}/build_${{ matrix.crypto }}/test/libdave_test
-      
-      - name: test-capi
-        run: |
-          ${{ runner.temp }}/build_${{ matrix.crypto }}/test/capi/capi_test
+          make dtest \
+            BUILD_TYPE=Debug \
+            BUILD_DIR="${{ runner.temp }}/build_${{ matrix.crypto }}_test" \
+            SSL="${{ matrix.crypto }}" \
+            BUILD_SHARED_LIBS=OFF \
+            SANITIZERS=ON
 
-      - name: Archive mlspp
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: mlspp-${{ matrix.runner }}-${{ matrix.crypto }}-${{ matrix.persistent_keys }}
-          path: |
-            ${{ github.workspace }}/cpp/vcpkg/buildtrees/mlspp
+      - name: test (Windows)
+        if: ${{ runner.os == 'Windows' }}
+        shell: bash
+        run: |
+          make dtest \
+            BUILD_TYPE=Debug \
+            BUILD_DIR="${{ runner.temp }}/build_${{ matrix.crypto }}_test" \
+            SSL="${{ matrix.crypto }}" \
+            BUILD_SHARED_LIBS=OFF \
+            SANITIZERS=OFF
+
+      - name: test-capi (macOS/Linux)
+        if: ${{ runner.os == 'macOS' || runner.os == 'Linux' }}
+        shell: bash
+        run: |
+          make dtest-capi \
+            BUILD_TYPE=Debug \
+            BUILD_DIR="${{ runner.temp }}/build_${{ matrix.crypto }}_test_capi" \
+            SSL="${{ matrix.crypto }}" \
+            BUILD_SHARED_LIBS=ON \
+            SANITIZERS=ON
+
+      - name: test-capi (Windows)
+        if: ${{ runner.os == 'Windows' }}
+        shell: bash
+        run: |
+          make dtest-capi \
+            BUILD_TYPE=Debug \
+            BUILD_DIR="${{ runner.temp }}/build_${{ matrix.crypto }}_test_capi" \
+            SSL="${{ matrix.crypto }}" \
+            BUILD_SHARED_LIBS=ON \
+            SANITIZERS=OFF

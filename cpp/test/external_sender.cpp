@@ -7,10 +7,27 @@ namespace discord {
 namespace dave {
 namespace test {
 
+::mlspp::bytes_ns::bytes BigEndianBytesFrom(uint64_t value) noexcept
+{
+    auto buffer = ::mlspp::bytes_ns::bytes();
+    buffer.reserve(sizeof(value));
+
+    for (int i = sizeof(value) - 1; i >= 0; --i) {
+        buffer.push_back(static_cast<uint8_t>(value >> (i * 8)));
+    }
+
+    return buffer;
+}
+
+::mlspp::CipherSuite CiphersuiteForProtocolVersion([[maybe_unused]] ProtocolVersion version) noexcept
+{
+    return ::mlspp::CipherSuite{::mlspp::CipherSuite::ID::P256_AES128GCM_SHA256_P256};
+}
+
 ExternalSender::ExternalSender(discord::dave::ProtocolVersion protocolVersion, uint64_t groupId)
 {
-    ciphersuite_ = discord::dave::mls::CiphersuiteForProtocolVersion(protocolVersion);
-    groupId_ = std::move(discord::dave::mls::BigEndianBytesFrom(groupId).as_vec());
+    ciphersuite_ = CiphersuiteForProtocolVersion(protocolVersion);
+    groupId_ = std::move(BigEndianBytesFrom(groupId).as_vec());
     signaturePrivateKey_ = std::make_shared<::mlspp::SignaturePrivateKey>(
       ::mlspp::SignaturePrivateKey::generate(ciphersuite_));
     externalSender_.signature_key = signaturePrivateKey_->public_key;

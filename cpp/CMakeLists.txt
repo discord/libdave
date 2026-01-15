@@ -43,9 +43,19 @@ if (ENABLE_SANITIZERS)
     set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} ${SANITIZER_FLAGS}")
     message(STATUS "Sanitizers enabled: address, undefined")
   elseif(MSVC)
-    set(SANITIZER_FLAGS "/fsanitize=address")
+    set(SANITIZER_FLAGS "/fsanitize=address /Zi")
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${SANITIZER_FLAGS}")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${SANITIZER_FLAGS}")
+    # Disable STL container annotations to avoid mismatch with dependencies built without ASAN
+    add_definitions(-D_DISABLE_STRING_ANNOTATION=1 -D_DISABLE_VECTOR_ANNOTATION=1)
+    # Find ASAN runtime DLL for copying to test directories
+    get_filename_component(COMPILER_DIR "${CMAKE_CXX_COMPILER}" DIRECTORY)
+    set(ASAN_RUNTIME_DLL "${COMPILER_DIR}/clang_rt.asan_dynamic-x86_64.dll" CACHE FILEPATH "Path to ASAN runtime DLL")
+    if(EXISTS "${ASAN_RUNTIME_DLL}")
+      message(STATUS "ASAN runtime DLL: ${ASAN_RUNTIME_DLL}")
+    else()
+      message(WARNING "ASAN runtime DLL not found at ${ASAN_RUNTIME_DLL}")
+    endif()
     message(STATUS "Sanitizers enabled: address")
   endif()
 endif()
@@ -169,8 +179,8 @@ target_include_directories(
   PUBLIC
     $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/src>
     $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/includes>
+    $<BUILD_INTERFACE:${OPENSSL_INCLUDE_DIR}>
     $<INSTALL_INTERFACE:include/${PROJECT_NAME}>
-    ${OPENSSL_INCLUDE_DIR}
 )
 
 target_link_libraries(${LIB_NAME} PUBLIC OpenSSL::Crypto)

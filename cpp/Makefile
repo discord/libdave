@@ -1,6 +1,13 @@
+# Options
 BUILD_DIR=build
-TEST_DIR=build/test
-CLANG_FORMAT=clang-format -i -style=file:.clang-format
+BUILD_TYPE=Release
+SANITIZERS=OFF
+BUILD_SHARED_LIBS=OFF
+PERSISTENT_KEYS=OFF
+TESTING=OFF
+SSL=openssl_3
+
+# Paths
 BORINGSSL_MANIFEST=vcpkg-alts/boringssl
 OPENSSL_1_1_MANIFEST=vcpkg-alts/openssl_1.1
 OPENSSL_3_MANIFEST=vcpkg-alts/openssl_3
@@ -8,53 +15,58 @@ WASM_MANIFEST=vcpkg-alts/wasm
 TOOLCHAIN_FILE=vcpkg/scripts/buildsystems/vcpkg.cmake
 EMSCRIPTEN_TOOLCHAIN_FILE=${EMSDK}/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake
 
-all: ${BUILD_DIR}
-	cmake --build ${BUILD_DIR} --target libdave
+CLANG_FORMAT=clang-format -i -style=file:.clang-format
 
-shared: ${BUILD_DIR}-shared
-	cmake --build ${BUILD_DIR} --target libdave
+ifeq ($(SSL), boringssl)
+	SSL_MANIFEST=${BORINGSSL_MANIFEST}
+else ifeq ($(SSL), openssl_1.1)
+	SSL_MANIFEST=${OPENSSL_1_1_MANIFEST}
+else ifeq ($(SSL), openssl_3)
+	SSL_MANIFEST=${OPENSSL_3_MANIFEST}
+else
+	$(error Invalid SSL option: $(SSL))
+endif
+
+ifeq ($(OS), Windows_NT)
+	RUNTIME_LIBRARY := MultiThreaded$(if $(filter Debug,$(BUILD_TYPE)),Debug)DLL
+	EXTRA_FLAGS=-DVCPKG_TARGET_TRIPLET=x64-windows-static-md \
+		-DVCPKG_TARGET_ARCHITECTURE=x86_64 \
+		-DCMAKE_MSVC_RUNTIME_LIBRARY=$(RUNTIME_LIBRARY)
+endif
+
+all: ${BUILD_DIR}
+	cmake --build ${BUILD_DIR} --target libdave --config ${BUILD_TYPE}
 
 ${BUILD_DIR}: CMakeLists.txt test/CMakeLists.txt
 	cmake -B${BUILD_DIR}  \
-		-DVCPKG_MANIFEST_DIR=${OPENSSL_3_MANIFEST} \
-		-DCMAKE_TOOLCHAIN_FILE=${TOOLCHAIN_FILE}
-
-${BUILD_DIR}-shared: CMakeLists.txt test/CMakeLists.txt
-	cmake -B${BUILD_DIR}  \
-		-DVCPKG_MANIFEST_DIR=${OPENSSL_3_MANIFEST} \
+		-DCMAKE_BUILD_TYPE=${BUILD_TYPE} \
+		-DVCPKG_MANIFEST_DIR=${SSL_MANIFEST} \
 		-DCMAKE_TOOLCHAIN_FILE=${TOOLCHAIN_FILE} \
-		-DBUILD_SHARED_LIBS=ON
+		-DBUILD_SHARED_LIBS=${BUILD_SHARED_LIBS} \
+		-DENABLE_SANITIZERS=${SANITIZERS} \
+		-DPERSISTENT_KEYS=${PERSISTENT_KEYS} \
+		-DTESTING=${TESTING} \
+		${EXTRA_FLAGS}
+
+shared:
+	$(MAKE) all BUILD_SHARED_LIBS=ON
 
 dev: ${TOOLCHAIN_FILE}
-	cmake -B${BUILD_DIR} -DTESTING=ON -DCMAKE_BUILD_TYPE=Debug \
-		-DVCPKG_MANIFEST_DIR=${OPENSSL_3_MANIFEST} \
-		-DCMAKE_TOOLCHAIN_FILE=${TOOLCHAIN_FILE}
+	$(MAKE) all BUILD_TYPE=Debug TESTING=ON
 
 dev-shared: ${TOOLCHAIN_FILE}
-	cmake -B${BUILD_DIR} -DTESTING=ON -DCMAKE_BUILD_TYPE=Debug \
-		-DBUILD_SHARED_LIBS=ON \
-		-DVCPKG_MANIFEST_DIR=${OPENSSL_3_MANIFEST} \
-		-DCMAKE_TOOLCHAIN_FILE=${TOOLCHAIN_FILE}
+	$(MAKE) all BUILD_TYPE=Debug TESTING=ON BUILD_SHARED_LIBS=ON
 
 dev-sanitizers: ${TOOLCHAIN_FILE}
-	cmake -B${BUILD_DIR} -DTESTING=ON -DCMAKE_BUILD_TYPE=Debug \
-		-DBUILD_SHARED_LIBS=ON \
-		-DENABLE_SANITIZERS=ON \
-		-DVCPKG_MANIFEST_DIR=${OPENSSL_3_MANIFEST} \
-		-DCMAKE_TOOLCHAIN_FILE=${TOOLCHAIN_FILE}
+	$(MAKE) all BUILD_TYPE=Debug TESTING=ON BUILD_SHARED_LIBS=ON SANITIZERS=ON
 
 devB: ${TOOLCHAIN_FILE}
 	# Like `dev`, but using OpenSSL 1.1
-	cmake -B${BUILD_DIR} -DTESTING=ON -DCMAKE_BUILD_TYPE=Debug \
-		-DVCPKG_MANIFEST_DIR=${OPENSSL_1_1_MANIFEST} \
-		-DCMAKE_TOOLCHAIN_FILE=${TOOLCHAIN_FILE}
+	$(MAKE) dev SSL=openssl_1.1
 
 devC: ${TOOLCHAIN_FILE}
 	# Like `dev`, but using BoringSSL
-	cmake -B${BUILD_DIR} -DTESTING=ON -DCMAKE_BUILD_TYPE=Debug \
-		-DREQUIRE_BORINGSSL=ON \
-		-DVCPKG_MANIFEST_DIR=${BORINGSSL_MANIFEST} \
-		-DCMAKE_TOOLCHAIN_FILE=${TOOLCHAIN_FILE}
+	$(MAKE) dev SSL=boringssl
 
 wasm: check-emsdk
 	emcmake cmake -B${BUILD_DIR} -DCMAKE_BUILD_TYPE=Release \
@@ -73,34 +85,50 @@ check-emsdk:
 	fi
 
 test: dev test/*
-	cmake --build ${BUILD_DIR} --target libdave_test
+	cmake --build ${BUILD_DIR} --target libdave_test --config ${BUILD_TYPE}
 
 test-capi: dev-shared test/capi/*
-	cmake --build ${BUILD_DIR} --target capi_test
+	cmake --build ${BUILD_DIR} --target capi_test --config ${BUILD_TYPE}
 
 test-sanitizers: dev-sanitizers test/*
-	cmake --build ${BUILD_DIR} --target libdave_test
+	cmake --build ${BUILD_DIR} --target libdave_test --config ${BUILD_TYPE}
 
 test-capi-sanitizers: dev-sanitizers test/capi/*
-	cmake --build ${BUILD_DIR} --target capi_test
+	cmake --build ${BUILD_DIR} --target capi_test --config ${BUILD_TYPE}
 
 dtest: test
-	${TEST_DIR}/libdave_test
+ifeq ($(OS), Windows_NT)
+	${BUILD_DIR}/test/Debug/libdave_test.exe
+else
+	${BUILD_DIR}/test/libdave_test
+endif
 
 dtest-capi: test-capi
-	${TEST_DIR}/capi/capi_test
+ifeq ($(OS), Windows_NT)
+	${BUILD_DIR}/test/capi/Debug/capi_test.exe
+else
+	${BUILD_DIR}/test/capi/capi_test
+endif
 
 dtest-sanitizers: test-sanitizers
-	${TEST_DIR}/libdave_test
+ifeq ($(OS), Windows_NT)
+	${BUILD_DIR}/test/Debug/libdave_test.exe
+else
+	${BUILD_DIR}/test/libdave_test
+endif
 
 dtest-capi-sanitizers: test-capi-sanitizers
-	${TEST_DIR}/capi/capi_test
+ifeq ($(OS), Windows_NT)
+	${BUILD_DIR}/test/capi/Debug/capi_test.exe
+else
+	${BUILD_DIR}/test/capi/capi_test
+endif
 
 dbtest: test
-	lldb ${TEST_DIR}/libdave_test
+	lldb ${BUILD_DIR}/test/libdave_test
 
 dbtest-capi: test-capi
-	lldb ${TEST_DIR}/capi/capi_test
+	lldb ${BUILD_DIR}/test/capi/capi_test
 
 ctest: test
 	cmake --build ${BUILD_DIR} --target test
@@ -109,7 +137,11 @@ clean:
 	cmake --build ${BUILD_DIR} --target clean
 
 cclean:
+ifeq ($(OS), Windows_NT)
+	if exist ${BUILD_DIR} rmdir /s /q ${BUILD_DIR}
+else
 	rm -rf ${BUILD_DIR}
+endif
 
 format:
 	find src -iname "*.h" -or -iname "*.cpp" -or -iname "*.c" | xargs ${CLANG_FORMAT}
