@@ -21,7 +21,6 @@ void PrintSSLErrors()
 }
 
 OpenSSLCryptor::OpenSSLCryptor(const EncryptionKey& encryptionKey)
-  : encryptionKey_(encryptionKey)
 {
     if (!cipherCtx_) {
         cipherCtx_ = EVP_CIPHER_CTX_new();
@@ -67,12 +66,15 @@ bool OpenSSLCryptor::Encrypt(ArrayView<uint8_t> ciphertextBufferOut,
 
     if (additionalData.size() > 0) {
         if (additionalData.size() > std::numeric_limits<int>::max()) {
-          DISCORD_LOG(LS_ERROR) << "Additional data size exceeds the maximum supported size";
-          return false;
+            DISCORD_LOG(LS_ERROR) << "Additional data size exceeds the maximum supported size";
+            return false;
         }
 
-        auto aadResult = EVP_EncryptUpdate(
-          cipherCtx_, nullptr, &ciphertextOutSize, additionalData.data(), static_cast<int>(additionalData.size()));
+        auto aadResult = EVP_EncryptUpdate(cipherCtx_,
+                                           nullptr,
+                                           &ciphertextOutSize,
+                                           additionalData.data(),
+                                           static_cast<int>(additionalData.size()));
 
         if (aadResult != 1) {
             DISCORD_LOG(LS_ERROR) << "Failed to update encryption with additional data";
@@ -144,8 +146,11 @@ bool OpenSSLCryptor::Decrypt(ArrayView<uint8_t> plaintextBufferOut,
             return false;
         }
 
-        auto aadResult = EVP_DecryptUpdate(
-          cipherCtx_, nullptr, &plaintextOutSize, additionalData.data(), static_cast<int>(additionalData.size()));
+        auto aadResult = EVP_DecryptUpdate(cipherCtx_,
+                                           nullptr,
+                                           &plaintextOutSize,
+                                           additionalData.data(),
+                                           static_cast<int>(additionalData.size()));
 
         if (aadResult != 1) {
             DISCORD_LOG(LS_ERROR) << "Failed to update decryption with additional data";

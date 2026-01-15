@@ -2,8 +2,6 @@
 
 #include <openssl/evp.h>
 
-#include <bytes/bytes.h>
-
 #include "cryptor.h"
 
 namespace discord {
@@ -29,7 +27,6 @@ public:
 
 private:
     EVP_CIPHER_CTX* cipherCtx_ = nullptr;
-    EncryptionKey encryptionKey_;
 };
 
 } // namespace dave

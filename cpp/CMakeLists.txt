@@ -183,8 +183,8 @@ target_include_directories(
     $<INSTALL_INTERFACE:include/${PROJECT_NAME}>
 )
 
-target_link_libraries(${LIB_NAME} PUBLIC OpenSSL::Crypto)
-target_link_libraries(${LIB_NAME} PUBLIC MLSPP::mlspp)
+target_link_libraries(${LIB_NAME} PRIVATE OpenSSL::Crypto)
+target_link_libraries(${LIB_NAME} PRIVATE MLSPP::mlspp)
 
 if (APPLE AND PERSISTENT_KEYS)
   target_link_libraries(${LIB_NAME} PUBLIC "-framework CoreFoundation" "-framework Security")
