@@ -11,6 +11,7 @@ option(TESTING "Build tests" OFF)
 option(PERSISTENT_KEYS "Enable storage of persistent signature keys" OFF)
 option(BUILD_SHARED_LIBS "Build shared libraries" OFF)
 option(ENABLE_SANITIZERS "Enable address and undefined behavior sanitizers" OFF)
+option(INSTALL_VCPKG_LICENSES "Installs license files from vcpkg deps which require it" OFF)
 
 include(CheckCXXCompilerFlag)
 include(CMakeFindDependencyMacro)
@@ -31,10 +32,18 @@ elseif(MSVC)
   # MSVC helpfully recommends safer equivalents for things like
   # getenv, but they are not portable.
   add_definitions(-D_CRT_SECURE_NO_WARNINGS)
+
+  if (${CMAKE_BUILD_TYPE} STREQUAL "Debug")
+    set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
+  endif()
 endif()
 
 # Configure sanitizers
 if (ENABLE_SANITIZERS)
+  if (NOT ${CMAKE_BUILD_TYPE} STREQUAL "Debug")
+    message(FATAL_ERROR "Sanitizers are only supported for Debug builds")
+  endif()
+
   if (CMAKE_CXX_COMPILER_ID MATCHES "Clang" OR CMAKE_CXX_COMPILER_ID MATCHES "GNU")
     set(SANITIZER_FLAGS "-fsanitize=address,undefined -fno-omit-frame-pointer -fno-optimize-sibling-calls")
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${SANITIZER_FLAGS}")
@@ -168,19 +177,24 @@ if (DEFINED EMSCRIPTEN)
 else()
   add_library(${LIB_NAME} ${LIB_HEADERS} ${LIB_SOURCES})
 
-  if (BUILD_SHARED_LIBS)
+  if (BUILD_SHARED_LIBS AND NOT WIN32)
     # Whithout this the resulting file is called liblibdave.dylib
     set_target_properties(${LIB_NAME} PROPERTIES OUTPUT_NAME dave)
   endif()
 endif()
 
+if (TESTING)
+  add_subdirectory(test)
+endif()
+
+
 target_include_directories(
   ${LIB_NAME}
   PUBLIC
-    $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/src>
     $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/includes>
-    $<BUILD_INTERFACE:${OPENSSL_INCLUDE_DIR}>
-    $<INSTALL_INTERFACE:include/${PROJECT_NAME}>
+    $<INSTALL_INTERFACE:include>
+  PRIVATE
+    $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/src>
 )
 
 target_link_libraries(${LIB_NAME} PRIVATE OpenSSL::Crypto)
@@ -190,6 +204,27 @@ if (APPLE AND PERSISTENT_KEYS)
   target_link_libraries(${LIB_NAME} PUBLIC "-framework CoreFoundation" "-framework Security")
 endif()
 
-if (TESTING)
-  add_subdirectory(test)
+set(CMAKE_SKIP_INSTALL_ALL_DEPENDENCY ON)
+
+install(TARGETS ${LIB_NAME} INCLUDES DESTINATION "include")
+install(DIRECTORY ${PROJECT_SOURCE_DIR}/includes/ DESTINATION "include")
+
+if (INSTALL_VCPKG_LICENSES)
+  set(DEPS_NEEDING_LICENSE mlspp nlohmann-json)
+  if (BORINGSSL_INCLUDE_DIR)
+    list(APPEND DEPS_NEEDING_LICENSE boringssl)
+  else ()
+    list(APPEND DEPS_NEEDING_LICENSE openssl)
+  endif ()
+
+  foreach(DEP_NAME ${DEPS_NEEDING_LICENSE})
+    set(DEP_LICENSE_PATH "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/share/${DEP_NAME}")
+    if (NOT EXISTS ${DEP_LICENSE_PATH})
+      message(ERROR "Could not find license file for ${DEP_LICENSE_PATH}")
+    endif()
+    
+    install(FILES ${DEP_LICENSE_PATH}/copyright DESTINATION "licenses" RENAME ${DEP_NAME})
+  endforeach()
 endif()
+
+install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/../LICENSE DESTINATION "licenses" RENAME ${LIB_NAME})

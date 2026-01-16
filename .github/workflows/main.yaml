@@ -1,4 +1,4 @@
-name: Build and Test
+name: cpp
 
 on:
   push:
@@ -9,21 +9,23 @@ on:
 env:
   CMAKE_BUILD_PARALLEL_LEVEL: 3
   CMAKE_TOOLCHAIN_FILE: ${{ github.workspace }}/cpp/vcpkg/scripts/buildsystems/vcpkg.cmake
-  VCPKG_BINARY_SOURCES: files,${{ github.workspace }}/vcpkg_cache,readwrite
+  VCPKG_BINARY_SOURCES: clear;files,${{ github.workspace }}/vcpkg_cache,readwrite
+  VCPKG_CACHE_DIR: ${{ github.workspace }}/vcpkg_cache
+
+defaults:
+  run:
+    working-directory: ./cpp
+    shell: bash
 
 jobs:
-  build:
+  debug-test:
     strategy:
       matrix:
-        runner: [ubuntu-latest, macos-latest, windows-latest]
-        crypto: [boringssl]
+        runner: [ubuntu-latest, macos-latest, macos-15-intel, windows-latest]
+        crypto: [openssl_3, openssl_1.1, boringssl]
       fail-fast: false
 
     runs-on: ${{matrix.runner}}
-
-    defaults:
-      run:
-        working-directory: ./cpp
 
     steps:
       - uses: actions/checkout@v4
@@ -35,48 +37,61 @@ jobs:
         with:
           runner: ${{ matrix.runner }}
           crypto: ${{ matrix.crypto }}
-          cache-dir: ${{ github.workspace }}/vcpkg_cache
+          cache-dir: ${{ env.VCPKG_CACHE_DIR }}
+          make-args: BUILD_TYPE=Debug SSL=${{ matrix.crypto }} BUILD_SHARED_LIBS=ON TESTING=ON SANITIZERS=ON
 
-      - name: test (macOS/Linux)
-        if: ${{ runner.os == 'macOS' || runner.os == 'Linux' }}
-        shell: bash
-        run: |
-          make dtest \
-            BUILD_TYPE=Debug \
-            BUILD_DIR="${{ runner.temp }}/build_${{ matrix.crypto }}_test" \
-            SSL="${{ matrix.crypto }}" \
-            BUILD_SHARED_LIBS=OFF \
-            SANITIZERS=ON
+      - name: build libdave
+        run: make dev-sanitizers BUILD_DIR=${{ env.BUILD_DIR }}
 
-      - name: test (Windows)
-        if: ${{ runner.os == 'Windows' }}
-        shell: bash
-        run: |
-          make dtest \
-            BUILD_TYPE=Debug \
-            BUILD_DIR="${{ runner.temp }}/build_${{ matrix.crypto }}_test" \
-            SSL="${{ matrix.crypto }}" \
-            BUILD_SHARED_LIBS=OFF \
-            SANITIZERS=OFF
+      - name: test
+        run: make dtest BUILD_DIR=${{ env.BUILD_DIR }} BUILD_TYPE=Debug
 
-      - name: test-capi (macOS/Linux)
-        if: ${{ runner.os == 'macOS' || runner.os == 'Linux' }}
-        shell: bash
-        run: |
-          make dtest-capi \
-            BUILD_TYPE=Debug \
-            BUILD_DIR="${{ runner.temp }}/build_${{ matrix.crypto }}_test_capi" \
-            SSL="${{ matrix.crypto }}" \
-            BUILD_SHARED_LIBS=ON \
-            SANITIZERS=ON
+      - name: test-capi
+        run: make dtest-capi BUILD_DIR=${{ env.BUILD_DIR }} BUILD_TYPE=Debug
 
-      - name: test-capi (Windows)
-        if: ${{ runner.os == 'Windows' }}
-        shell: bash
-        run: |
-          make dtest-capi \
-            BUILD_TYPE=Debug \
-            BUILD_DIR="${{ runner.temp }}/build_${{ matrix.crypto }}_test_capi" \
-            SSL="${{ matrix.crypto }}" \
-            BUILD_SHARED_LIBS=ON \
-            SANITIZERS=OFF
+  release-build:
+    strategy:
+      matrix:
+        runner: [ubuntu-latest, macos-latest, macos-15-intel, windows-latest]
+        crypto: [boringssl]
+        shared_libs: [ON, OFF]
+      fail-fast: false
+
+    runs-on: ${{matrix.runner}}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: "recursive"
+          fetch-depth: 0
+
+      - uses: ./.github/actions/prepare-build
+        with:
+          runner: ${{ matrix.runner }}
+          crypto: ${{ matrix.crypto }}
+          cache-dir: ${{ env.VCPKG_CACHE_DIR }}
+          make-args: BUILD_TYPE=Release SSL=${{ matrix.crypto }} BUILD_SHARED_LIBS=${{ matrix.shared_libs }} TESTING=ON INSTALL_VCPKG_LICENSES=ON
+
+      - name: build libdave
+        run: make all BUILD_DIR=${{ env.BUILD_DIR }} BUILD_TYPE=Release
+
+      - name: run tests
+        if: ${{ runner.os != 'Windows' || matrix.shared_libs == 'OFF' }}
+        run: make dtest BUILD_DIR=${{ env.BUILD_DIR }} BUILD_TYPE=Release
+
+      - name: run C api tests
+        if: ${{ matrix.shared_libs == 'ON' }}
+        run: make dtest-capi BUILD_DIR=${{ env.BUILD_DIR }} BUILD_TYPE=Release
+
+      - name: prepare artifacts (install)
+        run: make install BUILD_DIR=${{ env.BUILD_DIR }} BUILD_TYPE=Release
+
+      - name: check licenses
+        run: ls -la ${{ env.BUILD_DIR }}/install/licenses | grep -q "boringssl\|openssl"
+
+      - name: upload build artifacts
+        uses: actions/upload-artifact@v6
+        if: ${{ github.event_name == 'push' }}
+        with:
+          path: ${{ env.BUILD_DIR }}/install
+          name: libdave-${{ runner.os }}-${{ runner.arch }}-${{ matrix.crypto }}-${{ matrix.shared_libs == 'ON' && 'shared' || 'static' }}

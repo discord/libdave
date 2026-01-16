@@ -11,9 +11,14 @@ if(VCPKG_TARGET_IS_EMSCRIPTEN)
     set(VCPKG_LINKER_FLAGS "${VCPKG_LINKER_FLAGS} -s WASM=1 -s ALLOW_MEMORY_GROWTH=1")
 endif()
 
+if(VCPKG_TARGET_IS_OSX AND EXISTS "/usr/local/include/openssl/")
+    set(VCPKG_INCLUDE_OVERRIDE "-DCMAKE_CXX_FLAGS=-I${CURRENT_INSTALLED_DIR}/include")
+endif()
+
 vcpkg_cmake_configure(
     SOURCE_PATH "${SOURCE_PATH}"
     OPTIONS 
+        ${VCPKG_INCLUDE_OVERRIDE}
         -DDISABLE_GREASE=ON 
         -DVCPKG_MANIFEST_DIR="alternatives/openssl_3"
         -DMLS_CXX_NAMESPACE="mlspp"

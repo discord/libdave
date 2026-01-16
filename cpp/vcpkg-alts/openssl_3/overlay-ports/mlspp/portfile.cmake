@@ -5,9 +5,14 @@ vcpkg_from_github(
     SHA512 5d37631e2c47daae1133ef074e60cc09ca2d395f9e11c416f829060e374051cf219d2d7fe98dae49d1d045292e07d6a09f4814a5f16e6cc05e67e7cd96f146c4
 )
 
+if(VCPKG_TARGET_IS_OSX AND EXISTS "/usr/local/include/openssl/")
+    set(VCPKG_INCLUDE_OVERRIDE "-DCMAKE_CXX_FLAGS=-I${CURRENT_INSTALLED_DIR}/include")
+endif()
+
 vcpkg_cmake_configure(
     SOURCE_PATH "${SOURCE_PATH}"
     OPTIONS 
+        ${VCPKG_INCLUDE_OVERRIDE}
         -DDISABLE_GREASE=ON 
         -DVCPKG_MANIFEST_DIR="alternatives/openssl_3"
         -DMLS_CXX_NAMESPACE="mlspp"

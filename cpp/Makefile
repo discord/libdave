@@ -1,11 +1,12 @@
 # Options
 BUILD_DIR=build
-BUILD_TYPE=Release
+INSTALL_DIR=${BUILD_DIR}/install
 SANITIZERS=OFF
 BUILD_SHARED_LIBS=OFF
 PERSISTENT_KEYS=OFF
 TESTING=OFF
 SSL=openssl_3
+INSTALL_VCPKG_LICENSES=OFF
 
 # Paths
 BORINGSSL_MANIFEST=vcpkg-alts/boringssl
@@ -16,6 +17,10 @@ TOOLCHAIN_FILE=vcpkg/scripts/buildsystems/vcpkg.cmake
 EMSCRIPTEN_TOOLCHAIN_FILE=${EMSDK}/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake
 
 CLANG_FORMAT=clang-format -i -style=file:.clang-format
+
+DEFAULT_BUILD_TYPE=Debug
+BUILD_TYPE ?= $(DEFAULT_BUILD_TYPE)
+all shared install: DEFAULT_BUILD_TYPE=Release
 
 ifeq ($(SSL), boringssl)
 	SSL_MANIFEST=${BORINGSSL_MANIFEST}
@@ -37,7 +42,7 @@ endif
 all: ${BUILD_DIR}
 	cmake --build ${BUILD_DIR} --target libdave --config ${BUILD_TYPE}
 
-${BUILD_DIR}: CMakeLists.txt test/CMakeLists.txt
+${BUILD_DIR}: CMakeLists.txt test/CMakeLists.txt test/capi/CMakeLists.txt
 	cmake -B${BUILD_DIR}  \
 		-DCMAKE_BUILD_TYPE=${BUILD_TYPE} \
 		-DVCPKG_MANIFEST_DIR=${SSL_MANIFEST} \
@@ -46,25 +51,30 @@ ${BUILD_DIR}: CMakeLists.txt test/CMakeLists.txt
 		-DENABLE_SANITIZERS=${SANITIZERS} \
 		-DPERSISTENT_KEYS=${PERSISTENT_KEYS} \
 		-DTESTING=${TESTING} \
+		-DCMAKE_INSTALL_PREFIX=${INSTALL_DIR} \
+		-DINSTALL_VCPKG_LICENSES=${INSTALL_VCPKG_LICENSES} \
 		${EXTRA_FLAGS}
+
+install: ${BUILD_DIR}
+	cmake --build ${BUILD_DIR} --target install --config ${BUILD_TYPE}
 
 shared:
 	$(MAKE) all BUILD_SHARED_LIBS=ON
 
-dev: ${TOOLCHAIN_FILE}
-	$(MAKE) all BUILD_TYPE=Debug TESTING=ON
+dev:
+	$(MAKE) all TESTING=ON BUILD_TYPE=$(BUILD_TYPE)
 
-dev-shared: ${TOOLCHAIN_FILE}
-	$(MAKE) all BUILD_TYPE=Debug TESTING=ON BUILD_SHARED_LIBS=ON
+dev-shared:
+	$(MAKE) dev BUILD_SHARED_LIBS=ON
 
-dev-sanitizers: ${TOOLCHAIN_FILE}
-	$(MAKE) all BUILD_TYPE=Debug TESTING=ON BUILD_SHARED_LIBS=ON SANITIZERS=ON
+dev-sanitizers:
+	$(MAKE) dev BUILD_SHARED_LIBS=ON SANITIZERS=ON
 
-devB: ${TOOLCHAIN_FILE}
+devB:
 	# Like `dev`, but using OpenSSL 1.1
 	$(MAKE) dev SSL=openssl_1.1
 
-devC: ${TOOLCHAIN_FILE}
+devC:
 	# Like `dev`, but using BoringSSL
 	$(MAKE) dev SSL=boringssl
 
@@ -74,7 +84,7 @@ wasm: check-emsdk
 		-DCMAKE_TOOLCHAIN_FILE=${TOOLCHAIN_FILE} \
 		-DVCPKG_CHAINLOAD_TOOLCHAIN_FILE=${EMSCRIPTEN_TOOLCHAIN_FILE} \
 		-DVCPKG_TARGET_TRIPLET=wasm32-emscripten
-	cmake --build ${BUILD_DIR} --target libdave
+	cmake --build ${BUILD_DIR} --target libdave --config ${BUILD_TYPE}
 
 check-emsdk:
 	@if [ -z "$$EMSDK" ]; then \
@@ -98,28 +108,28 @@ test-capi-sanitizers: dev-sanitizers test/capi/*
 
 dtest: test
 ifeq ($(OS), Windows_NT)
-	${BUILD_DIR}/test/Debug/libdave_test.exe
+	${BUILD_DIR}/test/${BUILD_TYPE}/libdave_test.exe
 else
 	${BUILD_DIR}/test/libdave_test
 endif
 
 dtest-capi: test-capi
 ifeq ($(OS), Windows_NT)
-	${BUILD_DIR}/test/capi/Debug/capi_test.exe
+	${BUILD_DIR}/test/capi/${BUILD_TYPE}/capi_test.exe
 else
 	${BUILD_DIR}/test/capi/capi_test
 endif
 
 dtest-sanitizers: test-sanitizers
 ifeq ($(OS), Windows_NT)
-	${BUILD_DIR}/test/Debug/libdave_test.exe
+	${BUILD_DIR}/test/${BUILD_TYPE}/libdave_test.exe
 else
 	${BUILD_DIR}/test/libdave_test
 endif
 
 dtest-capi-sanitizers: test-capi-sanitizers
 ifeq ($(OS), Windows_NT)
-	${BUILD_DIR}/test/capi/Debug/capi_test.exe
+	${BUILD_DIR}/test/capi/${BUILD_TYPE}/capi_test.exe
 else
 	${BUILD_DIR}/test/capi/capi_test
 endif
@@ -131,7 +141,7 @@ dbtest-capi: test-capi
 	lldb ${BUILD_DIR}/test/capi/capi_test
 
 ctest: test
-	cmake --build ${BUILD_DIR} --target test
+	cmake --build ${BUILD_DIR} --target test --config ${BUILD_TYPE}
 
 clean:
 	cmake --build ${BUILD_DIR} --target clean

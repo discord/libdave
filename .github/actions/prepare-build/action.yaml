@@ -10,6 +10,9 @@ inputs:
   cache-dir:
     description: Where to put vcpkg cache
     required: true
+  make-args:
+    description: Additional arguments to pass to make to configure the build
+    required: true
 
 runs:
   using: "composite"
@@ -20,11 +23,13 @@ runs:
         git -C cpp/vcpkg rev-parse HEAD > cpp/vcpkg_commit.txt
 
     - name: Restore cache
-      uses: actions/cache@v4
+      id: cache-vcpkg-restore
+      uses: actions/cache/restore@v4
       with:
         path: ${{ inputs.cache-dir }}
-        key: v01-vcpkg-${{ inputs.runner }}-${{ inputs.crypto }}-${{ hashFiles('vcpkg_commit', 'cpp/vcpkg-alts/*') }}
+        key: v02-vcpkg-${{ inputs.runner }}-${{ inputs.crypto }}-${{ hashFiles('vcpkg_commit', 'cpp/vcpkg-alts/*') }}
         restore-keys: |
+          v02-vcpkg-${{ inputs.runner }}-${{ inputs.crypto }}
           v01-vcpkg-${{ inputs.runner }}-${{ inputs.crypto }}
 
     - name: vcpkg bootstrap (macOS/Linux)
@@ -42,10 +47,41 @@ runs:
       if: ${{ runner.os == 'macOS' }}
       shell: bash
       run: |
-        brew install ninja go nasm
+        brew install go nasm
+         
+    - name: Set CC and CXX environment variables (macOS)
+      if: ${{ runner.os == 'macOS' }}
+      shell: bash
+      run: |
+        echo "CC=$(brew --prefix llvm@18)/bin/clang" >> $GITHUB_ENV
+        echo "CXX=$(brew --prefix llvm@18)/bin/clang++" >> $GITHUB_ENV
+
+    - name: Update dependencies (act)
+      if: ${{ runner.os == 'Linux' && env.ACT }}
+      shell: bash
+      run: |
+        sudo apt-get update
 
     - name: Install dependencies (Ubuntu)
       if: ${{ runner.os == 'Linux' }}
       shell: bash
       run: |
         sudo apt-get install -y nasm
+
+    - name: Set BUILD_DIR environment variable
+      shell: bash
+      run: |
+        echo "BUILD_DIR='${{ runner.temp }}/build'" >> $GITHUB_ENV
+
+    - name: Configure build
+      shell: bash
+      working-directory: ./cpp
+      run: make ${{ env.BUILD_DIR }} BUILD_DIR=${{ env.BUILD_DIR }} ${{ inputs.make-args }}
+
+    - name: Cache vckpg
+      if: steps.cache-vcpkg-restore.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v4
+      with:
+        key: ${{ steps.cache-vcpkg-restore.outputs.cache-primary-key }}
+        path: ${{ inputs.cache-dir }}
+
