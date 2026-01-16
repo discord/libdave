@@ -71,12 +71,12 @@ runs:
     - name: Set BUILD_DIR environment variable
       shell: bash
       run: |
-        echo "BUILD_DIR='${{ runner.temp }}/build'" >> $GITHUB_ENV
+        echo "BUILD_DIR=${{ runner.temp }}/build" >> $GITHUB_ENV
 
     - name: Configure build
       shell: bash
       working-directory: ./cpp
-      run: make ${{ env.BUILD_DIR }} BUILD_DIR=${{ env.BUILD_DIR }} ${{ inputs.make-args }}
+      run: make '${{ env.BUILD_DIR }}' BUILD_DIR='${{ env.BUILD_DIR }}' ${{ inputs.make-args }}
 
     - name: Cache vckpg
       if: steps.cache-vcpkg-restore.outputs.cache-hit != 'true'

@@ -41,13 +41,13 @@ jobs:
           make-args: BUILD_TYPE=Debug SSL=${{ matrix.crypto }} BUILD_SHARED_LIBS=ON TESTING=ON SANITIZERS=ON
 
       - name: build libdave
-        run: make dev-sanitizers BUILD_DIR=${{ env.BUILD_DIR }}
+        run: make dev-sanitizers BUILD_DIR='${{ env.BUILD_DIR }}'
 
       - name: test
-        run: make dtest BUILD_DIR=${{ env.BUILD_DIR }} BUILD_TYPE=Debug
+        run: make dtest BUILD_DIR='${{ env.BUILD_DIR }}' BUILD_TYPE=Debug
 
       - name: test-capi
-        run: make dtest-capi BUILD_DIR=${{ env.BUILD_DIR }} BUILD_TYPE=Debug
+        run: make dtest-capi BUILD_DIR='${{ env.BUILD_DIR }}' BUILD_TYPE=Debug
 
   release-build:
     strategy:
@@ -73,21 +73,21 @@ jobs:
           make-args: BUILD_TYPE=Release SSL=${{ matrix.crypto }} BUILD_SHARED_LIBS=${{ matrix.shared_libs }} TESTING=ON INSTALL_VCPKG_LICENSES=ON
 
       - name: build libdave
-        run: make all BUILD_DIR=${{ env.BUILD_DIR }} BUILD_TYPE=Release
+        run: make all BUILD_DIR='${{ env.BUILD_DIR }}' BUILD_TYPE=Release
 
       - name: run tests
         if: ${{ runner.os != 'Windows' || matrix.shared_libs == 'OFF' }}
-        run: make dtest BUILD_DIR=${{ env.BUILD_DIR }} BUILD_TYPE=Release
+        run: make dtest BUILD_DIR='${{ env.BUILD_DIR }}' BUILD_TYPE=Release
 
       - name: run C api tests
         if: ${{ matrix.shared_libs == 'ON' }}
-        run: make dtest-capi BUILD_DIR=${{ env.BUILD_DIR }} BUILD_TYPE=Release
+        run: make dtest-capi BUILD_DIR='${{ env.BUILD_DIR }}' BUILD_TYPE=Release
 
       - name: prepare artifacts (install)
-        run: make install BUILD_DIR=${{ env.BUILD_DIR }} BUILD_TYPE=Release
+        run: make install BUILD_DIR='${{ env.BUILD_DIR }}' BUILD_TYPE=Release
 
       - name: check licenses
-        run: ls -la ${{ env.BUILD_DIR }}/install/licenses | grep -q "boringssl\|openssl"
+        run: ls -la '${{ env.BUILD_DIR }}/install/licenses' | grep -q "boringssl\|openssl"
 
       - name: upload build artifacts
         uses: actions/upload-artifact@v6
@@ -95,3 +95,4 @@ jobs:
         with:
           path: ${{ env.BUILD_DIR }}/install
           name: libdave-${{ runner.os }}-${{ runner.arch }}-${{ matrix.crypto }}-${{ matrix.shared_libs == 'ON' && 'shared' || 'static' }}
+          if-no-files-found: error
