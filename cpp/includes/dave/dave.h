@@ -468,6 +468,20 @@ DAVE_EXPORT size_t daveEncryptorGetMaxCiphertextByteSize(DAVEEncryptorHandle enc
                                                          size_t frameSize);
 
 /**
+ * @brief Checks if the encryptor has a key ratchet
+ * @param encryptor Encryptor handle
+ * @return true if has key ratchet, false otherwise
+ */
+DAVE_EXPORT bool daveEncryptorHasKeyRatchet(DAVEEncryptorHandle encryptor);
+
+/**
+ * @brief Checks if the encryptor is in passthrough mode
+ * @param encryptor Encryptor handle
+ * @return true if in passthrough mode, false otherwise
+ */
+DAVE_EXPORT bool daveEncryptorIsPassthroughMode(DAVEEncryptorHandle encryptor);
+
+/**
  * @brief Encrypts a media frame
  * @param encryptor Encryptor handle
  * @param mediaType Media type (audio or video)

@@ -384,6 +384,20 @@ size_t daveEncryptorGetMaxCiphertextByteSize(DAVEEncryptorHandle encryptorHandle
                                                frameSize);
 }
 
+bool daveEncryptorHasKeyRatchet(DAVEEncryptorHandle encryptorHandle)
+{
+    ARG_CHECK_RET(encryptorHandle, false);
+    auto encryptor = reinterpret_cast<discord::dave::IEncryptor*>(encryptorHandle);
+    return encryptor->HasKeyRatchet();
+}
+
+bool daveEncryptorIsPassthroughMode(DAVEEncryptorHandle encryptorHandle)
+{
+    ARG_CHECK_RET(encryptorHandle, false);
+    auto encryptor = reinterpret_cast<discord::dave::IEncryptor*>(encryptorHandle);
+    return encryptor->IsPassthroughMode();
+}
+
 DAVEEncryptorResultCode daveEncryptorEncrypt(DAVEEncryptorHandle encryptorHandle,
                                              DAVEMediaType mediaType,
                                              uint32_t ssrc,
