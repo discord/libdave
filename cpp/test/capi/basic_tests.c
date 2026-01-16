@@ -665,6 +665,27 @@ static int TestSession(void)
     return 1;
 }
 
+static int TestExceptions(void)
+{
+    printf("Testing exception catching\n");
+    DAVESessionHandle session = daveSessionCreate(NULL, NULL, TestSessionFailureCallback, NULL);
+    TEST_ASSERT(session != NULL, "Failed to create session");
+
+
+    PairwiseFingerprintData pairwiseFingerprintData;
+    PairwiseFingerprintDataInit(&pairwiseFingerprintData);
+    daveSessionGetPairwiseFingerprint(
+      session, 1, "1234123412341234", &PairwiseFingerprintCallback, &pairwiseFingerprintData);
+    PairwiseFingerprintDataWait(&pairwiseFingerprintData);
+    TEST_ASSERT_EQ(pairwiseFingerprintData.pairwiseFingerprintLength, 0,
+                   "Expected empty fingerprint when exception is caught");
+
+    PairwiseFingerprintDataDestroy(&pairwiseFingerprintData);
+    daveSessionDestroy(session);
+
+    return 1;
+}
+
 int main(void)
 {
     int passed = 0;
@@ -680,6 +701,7 @@ int main(void)
     RUN_TEST(TestPassthroughInOutBuffer);
     RUN_TEST(TestPassthroughTwoBuffers);
     RUN_TEST(TestSession);
+    RUN_TEST(TestExceptions);
 
     printf("\n=== Test Results ===\n");
     printf("Passed: %d\n", passed);
