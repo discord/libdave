@@ -710,7 +710,7 @@ catch (const std::exception& e) {
 std::unique_ptr<IKeyRatchet> Session::GetKeyRatchet(std::string const& userId) const noexcept
 {
     if (!currentState_) {
-        DISCORD_LOG(LS_ERROR) << "Cannot get key ratchet without an established MLS group";
+        DISCORD_LOG(LS_INFO) << "Cannot get key ratchet without an established MLS group";
         return nullptr;
     }
 
