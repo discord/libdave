@@ -8,8 +8,14 @@
       "version>=": "2023-10-13"
     },
     "nlohmann-json",
-    "vcpkg-cmake",
-    "vcpkg-cmake-config"
+    {
+      "name": "vcpkg-cmake",
+      "host": true
+    },
+    {
+      "name": "vcpkg-cmake-config",
+      "host": true
+    }
   ],
   "builtin-baseline": "eb33d2f7583405fca184bcdf7fdd5828ec88ac05"
 }
