@@ -4,9 +4,9 @@
 #include <thread>
 #include <vector>
 
+#include <dave/logger.h>
 #include <hpke/random.h>
 #include <hpke/signature.h>
-#include <dave/logger.h>
 #include <mls/crypto.h>
 #include <mls/messages.h>
 #include <mls/state.h>

@@ -5,8 +5,8 @@
 #include <optional>
 #include <unordered_map>
 
-#include "cryptor.h"
 #include "common.h"
+#include "cryptor.h"
 #include "utils/clock.h"
 
 namespace discord {

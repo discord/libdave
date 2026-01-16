@@ -1,7 +1,7 @@
 #pragma once
 
-#include <mls/messages.h>
 #include <dave/version.h>
+#include <mls/messages.h>
 
 namespace discord {
 namespace dave {

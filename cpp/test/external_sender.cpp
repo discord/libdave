@@ -19,7 +19,8 @@ namespace test {
     return buffer;
 }
 
-::mlspp::CipherSuite CiphersuiteForProtocolVersion([[maybe_unused]] ProtocolVersion version) noexcept
+::mlspp::CipherSuite CiphersuiteForProtocolVersion(
+  [[maybe_unused]] ProtocolVersion version) noexcept
 {
     return ::mlspp::CipherSuite{::mlspp::CipherSuite::ID::P256_AES128GCM_SHA256_P256};
 }
