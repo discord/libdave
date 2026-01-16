@@ -1,10 +1,6 @@
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
-if(NOT BUILD_SHARED_LIBS)
-    message(FATAL_ERROR "C API tests must be built with shared library")
-endif()
-
 # Small wrapper library for the external sender
 SET(EXTERNAL_SENDER_WRAPPER_LIB "external_sender")
 SET(EXTERNAL_SENDER_WRAPPER_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/../external_sender.cpp" "${CMAKE_CURRENT_SOURCE_DIR}/external_sender_wrapper.cpp")
@@ -23,7 +19,13 @@ add_executable(${TEST_APP_NAME} ${TEST_HEADERS} ${TEST_SOURCES})
 add_dependencies(${TEST_APP_NAME} ${LIB_NAME} ${EXTERNAL_SENDER_WRAPPER_LIB})
 target_include_directories(${TEST_APP_NAME} PRIVATE ${PROJECT_SOURCE_DIR}/includes)
 
-set_target_properties(${TEST_APP_NAME} PROPERTIES LINKER_LANGUAGE C)
+if (BUILD_SHARED_LIBS)
+    set(LINKER_LANG C)
+else()
+    set(LINKER_LANG CXX)
+endif()
+
+set_target_properties(${TEST_APP_NAME} PROPERTIES LINKER_LANGUAGE ${LINKER_LANG})
 
 target_link_libraries(${TEST_APP_NAME} PRIVATE ${LIB_NAME} ${EXTERNAL_SENDER_WRAPPER_LIB})
 

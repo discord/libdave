@@ -68,7 +68,7 @@ dev-shared:
 	$(MAKE) dev BUILD_SHARED_LIBS=ON
 
 dev-sanitizers:
-	$(MAKE) dev BUILD_SHARED_LIBS=ON SANITIZERS=ON
+	$(MAKE) dev SANITIZERS=ON
 
 devB:
 	# Like `dev`, but using OpenSSL 1.1
@@ -97,7 +97,7 @@ check-emsdk:
 test: dev test/*
 	cmake --build ${BUILD_DIR} --target libdave_test --config ${BUILD_TYPE}
 
-test-capi: dev-shared test/capi/*
+test-capi: dev test/capi/*
 	cmake --build ${BUILD_DIR} --target capi_test --config ${BUILD_TYPE}
 
 test-sanitizers: dev-sanitizers test/*

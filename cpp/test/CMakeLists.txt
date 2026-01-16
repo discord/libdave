@@ -37,7 +37,4 @@ if(WIN32 AND ENABLE_SANITIZERS)
     )
 endif()
 
-# Add C API tests if shared library is built
-if (BUILD_SHARED_LIBS)
-    add_subdirectory(capi)
-endif()
+add_subdirectory(capi)

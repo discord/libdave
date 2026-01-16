@@ -7,6 +7,8 @@
 
 #include "../external_sender.h"
 
+namespace {
+
 void CopyVectorToOutputBuffer(std::vector<uint8_t> const& vector, uint8_t** data, size_t* length)
 {
     if (data == nullptr || length == nullptr) {
@@ -23,6 +25,8 @@ void CopyVectorToOutputBuffer(std::vector<uint8_t> const& vector, uint8_t** data
     memcpy(*data, vector.data(), vector.size());
     *length = vector.size();
 }
+
+} // anonymous namespace
 
 DAVEExternalSenderHandle daveExternalSenderCreate(uint64_t groupId)
 {

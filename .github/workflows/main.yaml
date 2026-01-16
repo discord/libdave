@@ -80,7 +80,6 @@ jobs:
         run: make dtest BUILD_DIR='${{ env.BUILD_DIR }}' BUILD_TYPE=Release
 
       - name: run C api tests
-        if: ${{ matrix.shared_libs == 'ON' }}
         run: make dtest-capi BUILD_DIR='${{ env.BUILD_DIR }}' BUILD_TYPE=Release
 
       - name: prepare artifacts (install)
