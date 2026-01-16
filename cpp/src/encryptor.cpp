@@ -67,7 +67,7 @@ Encryptor::ResultCode Encryptor::Encrypt(MediaType mediaType,
         if (!keyRatchet_) {
             stats.encryptFailureCount++;
             stats.encryptMissingKeyCount++;
-            return ResultCode::EncryptionFailure;
+            return ResultCode::MissingKeyRatchet;
         }
     }
 
@@ -116,7 +116,7 @@ Encryptor::ResultCode Encryptor::Encrypt(MediaType mediaType,
 
         if (!cryptor) {
             stats.encryptMissingKeyCount++;
-            result = ResultCode::EncryptionFailure;
+            result = ResultCode::MissingCryptor;
             break;
         }
 
@@ -194,7 +194,7 @@ Encryptor::ResultCode Encryptor::Encrypt(MediaType mediaType,
         }
         else if (attempt >= MAX_CIPHERTEXT_VALIDATION_RETRIES) {
             assert(false && "Failed to validate encrypted section for codec");
-            result = ResultCode::EncryptionFailure;
+            result = ResultCode::TooManyAttempts;
             break;
         }
     }

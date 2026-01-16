@@ -124,6 +124,9 @@ public:
     enum ResultCode {
         Success,
         EncryptionFailure,
+        MissingKeyRatchet,
+        MissingCryptor,
+        TooManyAttempts,
     };
 
     virtual ~IEncryptor() = default;
@@ -196,6 +199,12 @@ static_assert(DAVE_MEDIA_TYPE_VIDEO == static_cast<int>(MediaType::Video));
 static_assert(DAVE_ENCRYPTOR_RESULT_CODE_SUCCESS == static_cast<int>(IEncryptor::Success));
 static_assert(DAVE_ENCRYPTOR_RESULT_CODE_ENCRYPTION_FAILURE ==
               static_cast<int>(IEncryptor::EncryptionFailure));
+static_assert(DAVE_ENCRYPTOR_RESULT_CODE_MISSING_KEY_RATCHET ==
+              static_cast<int>(IEncryptor::MissingKeyRatchet));
+static_assert(DAVE_ENCRYPTOR_RESULT_CODE_MISSING_CRYPTOR ==
+              static_cast<int>(IEncryptor::MissingCryptor));
+static_assert(DAVE_ENCRYPTOR_RESULT_CODE_TOO_MANY_ATTEMPTS ==
+              static_cast<int>(IEncryptor::TooManyAttempts));
 static_assert(DAVE_DECRYPTOR_RESULT_CODE_SUCCESS == static_cast<int>(IDecryptor::Success));
 static_assert(DAVE_DECRYPTOR_RESULT_CODE_DECRYPTION_FAILURE ==
               static_cast<int>(IDecryptor::DecryptionFailure));

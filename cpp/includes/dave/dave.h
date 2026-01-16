@@ -69,8 +69,11 @@ typedef enum {
  * @brief Result codes returned by encryption operations
  */
 typedef enum {
-    DAVE_ENCRYPTOR_RESULT_CODE_SUCCESS = 0,           /**< Encryption succeeded */
-    DAVE_ENCRYPTOR_RESULT_CODE_ENCRYPTION_FAILURE = 1 /**< Encryption failed */
+    DAVE_ENCRYPTOR_RESULT_CODE_SUCCESS = 0,            /**< Encryption succeeded */
+    DAVE_ENCRYPTOR_RESULT_CODE_ENCRYPTION_FAILURE = 1, /**< Encryption failed */
+    DAVE_ENCRYPTOR_RESULT_CODE_MISSING_KEY_RATCHET = 2,/**< No key ratchet available */
+    DAVE_ENCRYPTOR_RESULT_CODE_MISSING_CRYPTOR = 3,    /**< Missing cryptographic context */
+    DAVE_ENCRYPTOR_RESULT_CODE_TOO_MANY_ATTEMPTS = 4,  /**< Too many attempts to encrypt the frame failed */
 } DAVEEncryptorResultCode;
 
 /**
