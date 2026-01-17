@@ -54,7 +54,6 @@ jobs:
       matrix:
         runner: [ubuntu-latest, macos-latest, macos-15-intel, windows-latest]
         crypto: [boringssl]
-        shared_libs: [ON, OFF]
       fail-fast: false
 
     runs-on: ${{matrix.runner}}
@@ -70,13 +69,13 @@ jobs:
           runner: ${{ matrix.runner }}
           crypto: ${{ matrix.crypto }}
           cache-dir: ${{ env.VCPKG_CACHE_DIR }}
-          make-args: BUILD_TYPE=Release SSL=${{ matrix.crypto }} BUILD_SHARED_LIBS=${{ matrix.shared_libs }} TESTING=ON INSTALL_VCPKG_LICENSES=ON
+          make-args: BUILD_TYPE=Release SSL=${{ matrix.crypto }} BUILD_SHARED_LIBS=ON TESTING=ON INSTALL_VCPKG_LICENSES=ON
 
       - name: build libdave
         run: make all BUILD_DIR='${{ env.BUILD_DIR }}' BUILD_TYPE=Release
 
       - name: run tests
-        if: ${{ runner.os != 'Windows' || matrix.shared_libs == 'OFF' }}
+        if: ${{ runner.os != 'Windows' }}
         run: make dtest BUILD_DIR='${{ env.BUILD_DIR }}' BUILD_TYPE=Release
 
       - name: run C api tests
@@ -93,5 +92,5 @@ jobs:
         if: ${{ github.event_name == 'push' }}
         with:
           path: ${{ env.BUILD_DIR }}/install
-          name: libdave-${{ runner.os }}-${{ runner.arch }}-${{ matrix.crypto }}-${{ matrix.shared_libs == 'ON' && 'shared' || 'static' }}
+          name: libdave-${{ runner.os }}-${{ runner.arch }}-${{ matrix.crypto }}
           if-no-files-found: error

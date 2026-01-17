@@ -113,7 +113,7 @@ public:
 };
 
 using MLSFailureCallback = std::function<void(std::string const&, std::string const&)>;
-DAVE_EXPORT std::unique_ptr<ISession> CreateSession(KeyPairContextType context,
+std::unique_ptr<ISession> CreateSession(KeyPairContextType context,
                                                     std::string authSessionId,
                                                     MLSFailureCallback callback) noexcept;
 
@@ -155,7 +155,7 @@ public:
     virtual ProtocolVersion GetProtocolVersion() const = 0;
 };
 
-DAVE_EXPORT std::unique_ptr<IEncryptor> CreateEncryptor();
+std::unique_ptr<IEncryptor> CreateEncryptor();
 
 class IDecryptor {
 public:
@@ -185,7 +185,7 @@ public:
     virtual DecryptorStats GetStats(MediaType mediaType) const = 0;
 };
 
-DAVE_EXPORT std::unique_ptr<IDecryptor> CreateDecryptor();
+std::unique_ptr<IDecryptor> CreateDecryptor();
 
 static_assert(DAVE_CODEC_UNKNOWN == static_cast<int>(Codec::Unknown));
 static_assert(DAVE_CODEC_OPUS == static_cast<int>(Codec::Opus));

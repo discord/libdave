@@ -27,10 +27,10 @@ runs:
       uses: actions/cache/restore@v4
       with:
         path: ${{ inputs.cache-dir }}
-        key: v02-vcpkg-${{ inputs.runner }}-${{ inputs.crypto }}-${{ hashFiles('vcpkg_commit', 'cpp/vcpkg-alts/*') }}
+        key: vcpkg-${{ inputs.runner }}-${{ inputs.crypto }}-v03-${{ hashFiles('vcpkg_commit', 'cpp/vcpkg-alts/*') }}
         restore-keys: |
+          vcpkg-${{ inputs.runner }}-${{ inputs.crypto }}
           v02-vcpkg-${{ inputs.runner }}-${{ inputs.crypto }}
-          v01-vcpkg-${{ inputs.runner }}-${{ inputs.crypto }}
 
     - name: vcpkg bootstrap (macOS/Linux)
       if: ${{ runner.os == 'macOS' || runner.os == 'Linux' }}

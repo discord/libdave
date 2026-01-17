@@ -29,6 +29,8 @@ elseif(MSVC)
   add_compile_options(/W4 /WX)
   add_definitions(-DWINDOWS)
 
+  set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+
   # MSVC helpfully recommends safer equivalents for things like
   # getenv, but they are not portable.
   add_definitions(-D_CRT_SECURE_NO_WARNINGS)
@@ -186,7 +188,6 @@ endif()
 if (TESTING)
   add_subdirectory(test)
 endif()
-
 
 target_include_directories(
   ${LIB_NAME}

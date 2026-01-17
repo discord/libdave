@@ -33,10 +33,8 @@ else
 endif
 
 ifeq ($(OS), Windows_NT)
-	RUNTIME_LIBRARY := MultiThreaded$(if $(filter Debug,$(BUILD_TYPE)),Debug)DLL
-	EXTRA_FLAGS=-DVCPKG_TARGET_TRIPLET=x64-windows-static-md \
-		-DVCPKG_TARGET_ARCHITECTURE=x86_64 \
-		-DCMAKE_MSVC_RUNTIME_LIBRARY=$(RUNTIME_LIBRARY)
+	EXTRA_FLAGS=-DVCPKG_TARGET_TRIPLET=x64-windows-static \
+		-DVCPKG_TARGET_ARCHITECTURE=x86_64
 endif
 
 all: ${BUILD_DIR}

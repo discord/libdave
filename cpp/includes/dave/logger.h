@@ -15,7 +15,7 @@ using LogSink = void (*)(LoggingSeverity severity,
                          const char* file,
                          int line,
                          const std::string& message);
-DAVE_EXPORT void SetLogSink(LogSink sink);
+void SetLogSink(LogSink sink);
 
 class LogStreamer {
 public:

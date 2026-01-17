@@ -3,8 +3,6 @@
 #include <cstring>
 #include <vector>
 
-#include <dave/version.h>
-
 #include "../external_sender.h"
 
 namespace {
@@ -30,7 +28,7 @@ void CopyVectorToOutputBuffer(std::vector<uint8_t> const& vector, uint8_t** data
 
 DAVEExternalSenderHandle daveExternalSenderCreate(uint64_t groupId)
 {
-    auto protocolVersion = discord::dave::MaxSupportedProtocolVersion();
+    auto protocolVersion = daveMaxSupportedProtocolVersion();
     auto externalSender =
       std::make_unique<discord::dave::test::ExternalSender>(protocolVersion, groupId);
     return reinterpret_cast<DAVEExternalSenderHandle>(externalSender.release());
