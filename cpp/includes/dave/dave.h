@@ -10,7 +10,7 @@
  * - Handles from *Create functions must be freed with their *Destroy counterpart
  * - Output handles should be destroyed by the caller using the corresponding *Destroy function
  * - Functions do not take ownership of the input data unless otherwise specified
- * - Output byte arrays should be freed by the caller using free() unless otherwise specified
+ * - Output byte arrays allocated by the library must be freed using daveFree()
  */
 
 #pragma once
@@ -170,6 +170,26 @@ typedef struct DAVEDecryptorStats {
 DAVE_EXPORT uint16_t daveMaxSupportedProtocolVersion(void);
 
 /*******************************************************************************
+ * Memory Management
+ ******************************************************************************/
+
+/**
+ * @brief Frees memory allocated by the DAVE library
+ *
+ * Use this function to free any byte arrays or buffers allocated by DAVE API
+ * functions.
+ *
+ * @param ptr Pointer to memory previously allocated by a DAVE API function.
+ *            If NULL, this function does nothing.
+ *
+ * @note This function should be used to free output byte arrays from functions
+ *       like daveSessionGetLastEpochAuthenticator, daveSessionGetMarshalledKeyPackage,
+ *       daveCommitResultGetRosterMemberIds, etc. Do NOT use this to destroy handles;
+ *       use the corresponding *Destroy functions instead.
+ */
+DAVE_EXPORT void daveFree(void* ptr);
+
+/*******************************************************************************
  * Session Management
  ******************************************************************************/
 
@@ -227,7 +247,7 @@ DAVE_EXPORT uint16_t daveSessionGetProtocolVersion(DAVESessionHandle session);
 /**
  * @brief Retrieves the authenticator from the last MLS epoch
  * @param session Session handle
- * @param[out] authenticator Output pointer to authenticator bytes (caller must free)
+ * @param[out] authenticator Output pointer to authenticator bytes (caller must free with daveFree)
  * @param[out] length Output pointer to authenticator length
  */
 DAVE_EXPORT void daveSessionGetLastEpochAuthenticator(DAVESessionHandle session,
@@ -251,7 +271,7 @@ DAVE_EXPORT void daveSessionSetExternalSender(DAVESessionHandle session,
  * @param length Length of proposals
  * @param recognizedUserIds Array of recognized user ID strings
  * @param recognizedUserIdsLength Number of recognized user IDs
- * @param[out] commitWelcomeBytes Output buffer to commit/welcome message bytes (caller must free)
+ * @param[out] commitWelcomeBytes Output buffer to commit/welcome message bytes (caller must free with daveFree)
  * @param[out] commitWelcomeBytesLength Output length of the commit/welcome message
  */
 DAVE_EXPORT void daveSessionProcessProposals(DAVESessionHandle session,
@@ -291,7 +311,7 @@ DAVE_EXPORT DAVEWelcomeResultHandle daveSessionProcessWelcome(DAVESessionHandle 
 /**
  * @brief Gets the marshalled MLS key package for this session
  * @param session Session handle
- * @param[out] keyPackage Output buffer to key package bytes (caller must free)
+ * @param[out] keyPackage Output buffer to key package bytes (caller must free with daveFree)
  * @param[out] length Output length of the key package
  */
 DAVE_EXPORT void daveSessionGetMarshalledKeyPackage(DAVESessionHandle session,
@@ -353,7 +373,7 @@ DAVE_EXPORT bool daveCommitResultIsIgnored(DAVECommitResultHandle commitResultHa
 /**
  * @brief Gets the list of member IDs in the roster after the commit
  * @param commitResultHandle Commit result handle
- * @param[out] rosterIds Output buffer to array of roster member IDs (caller must free)
+ * @param[out] rosterIds Output buffer to array of roster member IDs (caller must free with daveFree)
  * @param[out] rosterIdsLength Output length of the roster member IDs array
  */
 DAVE_EXPORT void daveCommitResultGetRosterMemberIds(DAVECommitResultHandle commitResultHandle,
@@ -364,7 +384,7 @@ DAVE_EXPORT void daveCommitResultGetRosterMemberIds(DAVECommitResultHandle commi
  * @brief Gets the signature for a specific roster member
  * @param commitResultHandle Commit result handle
  * @param rosterId Roster member ID
- * @param[out] signature Output buffer to signature bytes (caller must free)
+ * @param[out] signature Output buffer to signature bytes (caller must free with daveFree)
  * @param[out] signatureLength Output length of the signature
  */
 DAVE_EXPORT void daveCommitResultGetRosterMemberSignature(DAVECommitResultHandle commitResultHandle,
@@ -385,7 +405,7 @@ DAVE_EXPORT void daveCommitResultDestroy(DAVECommitResultHandle commitResultHand
 /**
  * @brief Gets the list of member IDs in the roster from the welcome message
  * @param welcomeResultHandle Welcome result handle
- * @param[out] rosterIds Output buffer to array of roster member IDs (caller must free)
+ * @param[out] rosterIds Output buffer to array of roster member IDs (caller must free with daveFree)
  * @param[out] rosterIdsLength Output length of the roster member IDs array
  */
 DAVE_EXPORT void daveWelcomeResultGetRosterMemberIds(DAVEWelcomeResultHandle welcomeResultHandle,
@@ -396,7 +416,7 @@ DAVE_EXPORT void daveWelcomeResultGetRosterMemberIds(DAVEWelcomeResultHandle wel
  * @brief Gets the signature for a specific roster member
  * @param welcomeResultHandle Welcome result handle
  * @param rosterId Roster member ID
- * @param[out] signature Output buffer to signature bytes (caller must free)
+ * @param[out] signature Output buffer to signature bytes (caller must free with daveFree)
  * @param[out] signatureLength Output length of the signature
  */
 DAVE_EXPORT void daveWelcomeResultGetRosterMemberSignature(DAVEWelcomeResultHandle welcomeResultHandle,

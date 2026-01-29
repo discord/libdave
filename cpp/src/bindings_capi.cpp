@@ -81,6 +81,11 @@ uint16_t daveMaxSupportedProtocolVersion(void)
     return discord::dave::MaxSupportedProtocolVersion();
 }
 
+void daveFree(void* ptr)
+{
+    free(ptr);
+}
+
 DAVESessionHandle daveSessionCreate(void* context,
                                     const char* authSessionId,
                                     DAVEMLSFailureCallback callback,
