@@ -27,6 +27,8 @@ void Decryptor::TransitionToKeyRatchet(std::unique_ptr<IKeyRatchet> keyRatchet,
     DISCORD_LOG(LS_INFO) << "Transitioning to new key ratchet: " << keyRatchet.get()
                          << ", expiry: " << transitionExpiry.count();
 
+    std::lock_guard<std::mutex> lock(mutex_);
+
     // Remove expired cryptor managers first so a re-install of an expired key
     // domain is treated as a fresh install
     CleanupExpiredCryptorManagers();
@@ -54,6 +56,11 @@ void Decryptor::TransitionToKeyRatchet(std::unique_ptr<IKeyRatchet> keyRatchet,
 
 void Decryptor::TransitionToPassthroughMode(bool passthroughMode, Duration transitionExpiry)
 {
+    DISCORD_LOG(LS_INFO) << "Transitioning to passthrough mode, expiry: "
+                         << transitionExpiry.count();
+
+    std::lock_guard<std::mutex> lock(mutex_);
+
     if (passthroughMode) {
         allowPassThroughUntil_ = TimePoint::max();
     }
@@ -75,9 +82,11 @@ Decryptor::ResultCode Decryptor::Decrypt(MediaType mediaType,
         *bytesWritten = 0;
         return ResultCode::DecryptionFailure;
     }
-    auto& stats = stats_[mediaType];
+
+    std::lock_guard<std::mutex> lock(mutex_);
 
     auto start = clock_.Now();
+    auto& stats = stats_[mediaType];
 
     auto localFrame = GetOrCreateFrameProcessor();
     ScopeExit cleanup([&] { ReturnFrameProcessor(std::move(localFrame)); });
@@ -241,7 +250,6 @@ void Decryptor::CleanupExpiredCryptorManagers()
 
 std::unique_ptr<InboundFrameProcessor> Decryptor::GetOrCreateFrameProcessor()
 {
-    std::lock_guard<std::mutex> lock(frameProcessorsMutex_);
     if (frameProcessors_.empty()) {
         return std::make_unique<InboundFrameProcessor>();
     }
@@ -252,7 +260,6 @@ std::unique_ptr<InboundFrameProcessor> Decryptor::GetOrCreateFrameProcessor()
 
 void Decryptor::ReturnFrameProcessor(std::unique_ptr<InboundFrameProcessor> frameProcessor)
 {
-    std::lock_guard<std::mutex> lock(frameProcessorsMutex_);
     frameProcessors_.push_back(std::move(frameProcessor));
 }
 

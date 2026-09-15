@@ -50,6 +50,7 @@ public:
     virtual size_t GetMaxPlaintextByteSize(MediaType mediaType, size_t encryptedFrameSize) override;
     virtual DecryptorStats GetStats(MediaType mediaType) const override
     {
+        std::lock_guard<std::mutex> lock(mutex_);
         return stats_[mediaType];
     }
 
@@ -66,11 +67,12 @@ private:
     std::unique_ptr<InboundFrameProcessor> GetOrCreateFrameProcessor();
     void ReturnFrameProcessor(std::unique_ptr<InboundFrameProcessor> frameProcessor);
 
+    mutable std::mutex mutex_;
+
     Clock defaultClock_;
     const IClock& clock_{defaultClock_};
     std::deque<CryptorManager> cryptorManagers_;
 
-    std::mutex frameProcessorsMutex_;
     std::vector<std::unique_ptr<InboundFrameProcessor>> frameProcessors_;
 
     TimePoint allowPassThroughUntil_{TimePoint::min()};
