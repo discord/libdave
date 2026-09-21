@@ -733,8 +733,8 @@ std::unique_ptr<IKeyRatchet> Session::GetKeyRatchet(std::string const& userId) c
     memcpy(userIdBytes.data(), &u64userId, sizeof(u64userId));
 
     // generate the base secret for the hash ratchet
-    auto baseSecret =
-      currentState_->do_export(Session::USER_MEDIA_KEY_BASE_LABEL, userIdBytes, kAesGcm128KeyBytes);
+    auto baseSecret = currentState_->do_export(
+      std::string(Session::USER_MEDIA_KEY_BASE_LABEL), userIdBytes, kAesGcm128KeyBytes);
 
     // this assumes the MLS ciphersuite produces a kAesGcm128KeyBytes sized key
     // would need to be updated to a different ciphersuite if there's a future mismatch

@@ -6,6 +6,7 @@
 #include <optional>
 #include <set>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include <dave/dave_interfaces.h>
@@ -99,7 +100,7 @@ private:
 
     void ClearPendingState();
 
-    inline static const std::string USER_MEDIA_KEY_BASE_LABEL = "Discord Secure Frames v0";
+    static constexpr std::string_view USER_MEDIA_KEY_BASE_LABEL = "Discord Secure Frames v0";
 
     ProtocolVersion protocolVersion_;
     std::vector<uint8_t> groupId_;
