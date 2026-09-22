@@ -12,6 +12,7 @@ option(PERSISTENT_KEYS "Enable storage of persistent signature keys" OFF)
 option(BUILD_SHARED_LIBS "Build shared libraries" OFF)
 option(ENABLE_SANITIZERS "Enable address and undefined behavior sanitizers" OFF)
 option(INSTALL_VCPKG_LICENSES "Installs license files from vcpkg deps which require it" OFF)
+option(FUZZER "Build the libFuzzer fuzz driver (requires Clang)" OFF)
 
 include(CheckCXXCompilerFlag)
 include(CMakeFindDependencyMacro)
@@ -64,6 +65,16 @@ if (ENABLE_SANITIZERS)
     endif()
     message(STATUS "Sanitizers enabled: address")
   endif()
+endif()
+
+# Coverage instrumentation for the fuzz driver and everything it links
+if (FUZZER)
+  if (NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    message(FATAL_ERROR "FUZZER requires Clang for libFuzzer")
+  endif()
+
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsanitize=fuzzer-no-link")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=fuzzer-no-link")
 endif()
 
 find_package(OpenSSL REQUIRED)
@@ -182,6 +193,18 @@ endif()
 
 if (TESTING)
   add_subdirectory(test)
+endif()
+
+if (FUZZER)
+  add_executable(dave_fuzzer afl-driver/src/main.cpp)
+  target_include_directories(
+    dave_fuzzer
+    PRIVATE
+      ${PROJECT_SOURCE_DIR}/src
+      ${PROJECT_SOURCE_DIR}/afl-driver/include
+  )
+  target_link_options(dave_fuzzer PRIVATE -fsanitize=fuzzer)
+  target_link_libraries(dave_fuzzer PRIVATE ${LIB_NAME} MLSPP::mlspp)
 endif()
 
 target_include_directories(

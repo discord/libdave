@@ -2,13 +2,12 @@
 #include <cassert>
 #include <iostream>
 #include <memory>
-#include <unistd.h>
 
 #include <fuzzer/FuzzedDataProvider.h>
 
+#include <dave/array_view.h>
 #include "common.h"
 #include "decryptor.h"
-#include "utils/array_view.h"
 
 using namespace discord::dave;
 
@@ -21,8 +20,10 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size)
     Decryptor decryptor;
     const auto OutFrameSize = decryptor.GetMaxPlaintextByteSize(mediaType, InFrame.size());
     auto outFrame = std::make_unique<uint8_t[]>(OutFrameSize);
+    size_t bytesWritten = 0;
     [[maybe_unused]] auto res = decryptor.Decrypt(mediaType,
                                                   MakeArrayView(InFrame.data(), InFrame.size()),
-                                                  MakeArrayView(outFrame.get(), OutFrameSize));
+                                                  MakeArrayView(outFrame.get(), OutFrameSize),
+                                                  &bytesWritten);
     return 0;
 }

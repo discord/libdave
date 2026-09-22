@@ -8,3 +8,5 @@ repos:
     hooks:
       - id: clang-format
         files: ^cpp/(afl-driver|includes|src|test)/.*\.(c|cpp|h)$
+        # vendored LLVM header stays byte-identical to its upstream source
+        exclude: ^cpp/afl-driver/include/

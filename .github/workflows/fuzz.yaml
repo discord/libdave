@@ -1,0 +1,68 @@
+name: fuzz
+
+# Bounded coverage-guided fuzzing of the frame parsing/decryption surface.
+# Runs only when a PR touches that surface (or on demand); the fuzz corpus is
+# replayed as a regular test in every CI run via corpus_regression_tests.cpp.
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/fuzz.yaml"
+      - "cpp/afl-driver/**"
+      - "cpp/src/codec_utils.*"
+      - "cpp/src/cryptor.*"
+      - "cpp/src/cryptor_manager.*"
+      - "cpp/src/decryptor.*"
+      - "cpp/src/encryptor.*"
+      - "cpp/src/frame_processors.*"
+      - "cpp/src/utils/leb128.*"
+  workflow_dispatch:
+    inputs:
+      fuzz-time:
+        description: Seconds to fuzz for
+        default: "600"
+
+env:
+  CMAKE_BUILD_PARALLEL_LEVEL: 3
+  CMAKE_TOOLCHAIN_FILE: ${{ github.workspace }}/cpp/vcpkg/scripts/buildsystems/vcpkg.cmake
+  VCPKG_BINARY_SOURCES: clear;files,${{ github.workspace }}/vcpkg_cache,readwrite
+  VCPKG_CACHE_DIR: ${{ github.workspace }}/vcpkg_cache
+  # libFuzzer requires Clang
+  CC: clang
+  CXX: clang++
+
+defaults:
+  run:
+    working-directory: ./cpp
+    shell: bash
+
+jobs:
+  fuzz:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: "recursive"
+          fetch-depth: 0
+
+      - uses: ./.github/actions/prepare-build
+        with:
+          runner: ubuntu-latest
+          crypto: boringssl
+          cache-dir: ${{ env.VCPKG_CACHE_DIR }}
+          make-args: BUILD_TYPE=Debug SSL=boringssl SANITIZERS=ON FUZZER=ON
+
+      - name: fuzz
+        run: make fuzz BUILD_DIR='${{ env.BUILD_DIR }}' FUZZ_BUILD_DIR='${{ env.BUILD_DIR }}' FUZZ_TIME='${{ inputs.fuzz-time || 600 }}'
+
+      - name: upload findings
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-findings
+          path: |
+            ${{ env.BUILD_DIR }}/crash-*
+            ${{ env.BUILD_DIR }}/leak-*
+            ${{ env.BUILD_DIR }}/timeout-*
+            ${{ env.BUILD_DIR }}/oom-*
+          if-no-files-found: ignore

@@ -7,9 +7,20 @@ SET(TEST_APP_NAME "libdave_test")
 file(GLOB_RECURSE TEST_HEADERS CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/*.h")
 file(GLOB_RECURSE TEST_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/*.cpp")
 
-add_executable(${TEST_APP_NAME} ${TEST_HEADERS} ${TEST_SOURCES})
+# The fuzz driver is part of the test build so the corpus regression test can
+# call its entry point (and so the driver itself can never rot uncompiled).
+add_executable(${TEST_APP_NAME} ${TEST_HEADERS} ${TEST_SOURCES}
+               ${PROJECT_SOURCE_DIR}/afl-driver/src/main.cpp)
 add_dependencies(${TEST_APP_NAME} ${LIB_NAME})
-target_include_directories(${TEST_APP_NAME} PRIVATE ${PROJECT_SOURCE_DIR}/src)
+target_include_directories(
+  ${TEST_APP_NAME}
+  PRIVATE
+    ${PROJECT_SOURCE_DIR}/src
+    ${PROJECT_SOURCE_DIR}/afl-driver/include
+)
+target_compile_definitions(
+  ${TEST_APP_NAME} PRIVATE DAVE_FUZZ_CORPUS_DIR="${PROJECT_SOURCE_DIR}/afl-driver/input"
+)
 
 target_link_libraries(libdave_test PRIVATE ${LIB_NAME} GTest::gtest_main GTest::gmock MLSPP::bytes MLSPP::mlspp)
 

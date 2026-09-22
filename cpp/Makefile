@@ -5,6 +5,7 @@ SANITIZERS=OFF
 BUILD_SHARED_LIBS=OFF
 PERSISTENT_KEYS=OFF
 TESTING=OFF
+FUZZER=OFF
 SSL=openssl_3
 INSTALL_VCPKG_LICENSES=OFF
 
@@ -58,6 +59,7 @@ ${BUILD_DIR}: CMakeLists.txt test/CMakeLists.txt test/capi/CMakeLists.txt
 		-DENABLE_SANITIZERS=${SANITIZERS} \
 		-DPERSISTENT_KEYS=${PERSISTENT_KEYS} \
 		-DTESTING=${TESTING} \
+		-DFUZZER=${FUZZER} \
 		-DCMAKE_INSTALL_PREFIX=${INSTALL_DIR} \
 		-DINSTALL_VCPKG_LICENSES=${INSTALL_VCPKG_LICENSES} \
 		${EXTRA_FLAGS}
@@ -161,7 +163,19 @@ else
 endif
 
 format:
-	find ${FORMAT_PATHS} -iname "*.h" -or -iname "*.cpp" -or -iname "*.c" | xargs ${CLANG_FORMAT}
+	find ${FORMAT_PATHS} -path "afl-driver/include" -prune -or \( -iname "*.h" -o -iname "*.cpp" -o -iname "*.c" \) -print | xargs ${CLANG_FORMAT}
 
 format-check:
-	find ${FORMAT_PATHS} -iname "*.h" -or -iname "*.cpp" -or -iname "*.c" | xargs ${CLANG_FORMAT_CHECK}
+	find ${FORMAT_PATHS} -path "afl-driver/include" -prune -or \( -iname "*.h" -o -iname "*.cpp" -o -iname "*.c" \) -print | xargs ${CLANG_FORMAT_CHECK}
+
+FUZZ_BUILD_DIR=${BUILD_DIR}/fuzz
+FUZZ_TIME=600
+
+fuzz-build:
+	$(MAKE) ${FUZZ_BUILD_DIR} BUILD_DIR=${FUZZ_BUILD_DIR} BUILD_TYPE=Debug FUZZER=ON SANITIZERS=ON SSL=boringssl
+	cmake --build ${FUZZ_BUILD_DIR} --target dave_fuzzer
+
+fuzz: fuzz-build
+	mkdir -p ${FUZZ_BUILD_DIR}/corpus
+	${FUZZ_BUILD_DIR}/dave_fuzzer -max_total_time=${FUZZ_TIME} -print_final_stats=1 \
+		-artifact_prefix=${FUZZ_BUILD_DIR}/ ${FUZZ_BUILD_DIR}/corpus afl-driver/input
