@@ -64,6 +64,7 @@ private:
 
     std::mutex keyGenMutex_;
     std::unique_ptr<IKeyRatchet> keyRatchet_;
+    std::vector<uint8_t> keyDomainIdentity_;
     std::shared_ptr<ICryptor> cryptor_;
     KeyGeneration currentKeyGeneration_{0};
     TruncatedSyncNonce truncatedNonce_{0};

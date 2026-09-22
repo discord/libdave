@@ -56,6 +56,14 @@ Decryptor::ResultCode DecryptFrame(Decryptor& decryptor, const std::vector<uint8
                              &bytesWritten);
 }
 
+TruncatedSyncNonce TruncatedNonceOf(const std::vector<uint8_t>& encryptedFrame)
+{
+    InboundFrameProcessor frameProcessor;
+    frameProcessor.ParseFrame({encryptedFrame.data(), encryptedFrame.size()});
+    EXPECT_TRUE(frameProcessor.IsEncrypted());
+    return frameProcessor.GetTruncatedNonce();
+}
+
 } // namespace
 
 TEST_F(CryptorTests, PassthroughInOutBuffer)
@@ -313,6 +321,67 @@ TEST_F(CryptorTests, DistinctDomainRatchetsAreNotDeduplicated)
 
     EXPECT_EQ(DecryptFrame(decryptor, firstFrame), Decryptor::ResultCode::Success);
     EXPECT_EQ(DecryptFrame(decryptor, secondFrame), Decryptor::ResultCode::Success);
+}
+
+TEST_F(CryptorTests, SameDomainReinstallKeepsNonceSequence)
+{
+    constexpr auto UserId = "0123456789876543210";
+    auto frame = GetBufferFromHex(RandomBytes);
+
+    Encryptor encryptor;
+    encryptor.AssignSsrcToCodec(0, Codec::Opus);
+    encryptor.SetKeyRatchet(std::make_unique<StaticKeyRatchet>(UserId));
+    auto firstFrame = EncryptFrame(encryptor, frame);
+    auto secondFrame = EncryptFrame(encryptor, frame);
+
+    encryptor.SetKeyRatchet(std::make_unique<StaticKeyRatchet>(UserId));
+    auto thirdFrame = EncryptFrame(encryptor, frame);
+
+    EXPECT_EQ(TruncatedNonceOf(thirdFrame), TruncatedNonceOf(secondFrame) + 1);
+    EXPECT_NE(thirdFrame, firstFrame);
+
+    Decryptor decryptor;
+    decryptor.TransitionToKeyRatchet(std::make_unique<StaticKeyRatchet>(UserId));
+    EXPECT_EQ(DecryptFrame(decryptor, firstFrame), Decryptor::ResultCode::Success);
+    EXPECT_EQ(DecryptFrame(decryptor, secondFrame), Decryptor::ResultCode::Success);
+    EXPECT_EQ(DecryptFrame(decryptor, thirdFrame), Decryptor::ResultCode::Success);
+}
+
+TEST_F(CryptorTests, SameDomainReinstallAfterClearKeepsNonceSequence)
+{
+    constexpr auto UserId = "0123456789876543210";
+    auto frame = GetBufferFromHex(RandomBytes);
+
+    Encryptor encryptor;
+    encryptor.AssignSsrcToCodec(0, Codec::Opus);
+    encryptor.SetKeyRatchet(std::make_unique<StaticKeyRatchet>(UserId));
+    auto firstFrame = EncryptFrame(encryptor, frame);
+
+    encryptor.SetKeyRatchet(nullptr);
+    EXPECT_FALSE(encryptor.HasKeyRatchet());
+
+    encryptor.SetKeyRatchet(std::make_unique<StaticKeyRatchet>(UserId));
+    auto secondFrame = EncryptFrame(encryptor, frame);
+
+    EXPECT_EQ(TruncatedNonceOf(secondFrame), TruncatedNonceOf(firstFrame) + 1);
+}
+
+TEST_F(CryptorTests, NewDomainInstallRestartsNonceSequence)
+{
+    constexpr auto FirstUserId = "1111111111111111111";
+    constexpr auto SecondUserId = "2222222222222222222";
+    auto frame = GetBufferFromHex(RandomBytes);
+
+    Encryptor encryptor;
+    encryptor.AssignSsrcToCodec(0, Codec::Opus);
+    encryptor.SetKeyRatchet(std::make_unique<StaticKeyRatchet>(FirstUserId));
+    auto firstDomainFrame = EncryptFrame(encryptor, frame);
+    EncryptFrame(encryptor, frame);
+
+    encryptor.SetKeyRatchet(std::make_unique<StaticKeyRatchet>(SecondUserId));
+    auto secondDomainFrame = EncryptFrame(encryptor, frame);
+
+    EXPECT_EQ(TruncatedNonceOf(secondDomainFrame), TruncatedNonceOf(firstDomainFrame));
 }
 
 } // namespace test

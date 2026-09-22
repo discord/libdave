@@ -28,10 +28,23 @@ std::unique_ptr<IEncryptor> CreateEncryptor()
 void Encryptor::SetKeyRatchet(std::unique_ptr<IKeyRatchet> keyRatchet)
 {
     std::lock_guard<std::mutex> lock(keyGenMutex_);
+
+    // only a new key domain may restart the nonce sequence, a repeat would reuse nonces
+    if (keyRatchet) {
+        auto domainIdentity = keyRatchet->GetDomainIdentity();
+        if (domainIdentity != keyDomainIdentity_) {
+            keyDomainIdentity_ = std::move(domainIdentity);
+            currentKeyGeneration_ = 0;
+            truncatedNonce_ = 0;
+        }
+        else {
+            DISCORD_LOG(LS_INFO)
+              << "Key ratchet re-installed for current key domain, keeping nonce sequence";
+        }
+    }
+
     keyRatchet_ = std::move(keyRatchet);
     cryptor_ = nullptr;
-    currentKeyGeneration_ = 0;
-    truncatedNonce_ = 0;
 }
 
 void Encryptor::SetPassthroughMode(bool passthroughMode)
