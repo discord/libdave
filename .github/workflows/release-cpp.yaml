@@ -1,0 +1,288 @@
+# Cuts a libdave cpp release from a commit on main. It never builds anything:
+# it republishes, byte for byte, the artifacts that main.yaml already produced
+# and tested for that commit. Publishing the draft it leaves behind, which is
+# what creates the tag, stays manual.
+name: release cpp
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release, as a bare X.Y.Z. The tag (v<version>/cpp) and title (libdave <version>) are derived from it, and it must sort above the latest released version."
+        required: true
+        type: string
+      commit:
+        description: "Commit to release. Must be on main. Defaults to the current tip of main."
+        required: false
+        type: string
+        default: ""
+      dry_run:
+        description: "Run every check and write the summary, but create no release."
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-cpp
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+      VERSION: ${{ inputs.version }}
+      # The complete set of artifacts we publish as release assets. Keep in
+      # sync with the release-build matrix in main.yaml: changing what we ship
+      # to external consumers should be a deliberate edit here, so the workflow
+      # fails on anything missing from this list and on anything not in it.
+      EXPECTED_ARTIFACTS: >-
+        libdave-Linux-X64-boringssl
+        libdave-Linux-ARM64-boringssl
+        libdave-macOS-X64-boringssl
+        libdave-macOS-ARM64-boringssl
+        libdave-Windows-X64-boringssl
+
+    steps:
+      - name: validate version
+        id: version
+        run: |
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::version must be a bare X.Y.Z, got '$VERSION'"
+            exit 1
+          fi
+
+          tags="$(gh api --paginate "repos/$REPO/tags" --jq '.[].name' || true)"
+          latest="$(sed -n 's#^v\([0-9]\+\.[0-9]\+\.[0-9]\+\)/cpp$#\1#p' <<<"$tags" | sort -V | tail -1)"
+
+          if [[ -n "$latest" ]]; then
+            highest="$(printf '%s\n%s\n' "$latest" "$VERSION" | sort -V | tail -1)"
+            if [[ "$VERSION" == "$latest" || "$highest" != "$VERSION" ]]; then
+              echo "::error::version $VERSION does not sort above the latest release $latest"
+              exit 1
+            fi
+          fi
+
+          echo "tag=v$VERSION/cpp" >> "$GITHUB_OUTPUT"
+          echo "latest=${latest:-none}" >> "$GITHUB_OUTPUT"
+
+      # A draft release has no tag, so a leftover draft from a failed attempt is
+      # invisible to the tag check. Both are fatal: clearing one is a deliberate
+      # act, because it may be a draft someone else is part way through editing.
+      - name: check the version is unused
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          if gh api "repos/$REPO/git/ref/tags/$TAG" >/dev/null 2>&1; then
+            echo "::error::tag $TAG already exists"
+            exit 1
+          fi
+
+          existing="$(gh api --paginate "repos/$REPO/releases" \
+            | jq -r --arg tag "$TAG" '.[] | select(.tag_name == $tag) | "\(.html_url) (draft: \(.draft))"')"
+
+          if [[ -n "$existing" ]]; then
+            echo "::error::a release already uses tag $TAG: $existing"
+            exit 1
+          fi
+
+      - name: resolve commit
+        id: commit
+        env:
+          COMMIT: ${{ inputs.commit }}
+        run: |
+          ref="${COMMIT:-main}"
+
+          if ! sha="$(gh api "repos/$REPO/commits/$ref" --jq '.sha')"; then
+            echo "::error::no such commit on $REPO: $ref"
+            exit 1
+          fi
+
+          # main is identical to the commit, or ahead of it; anything else
+          # (behind, diverged) means the commit is not on main.
+          compare="$(gh api "repos/$REPO/compare/$sha...main" --jq '.status')"
+          case "$compare" in
+            identical | ahead) ;;
+            *)
+              echo "::error::$sha is not on main (comparing it against main gives: $compare)"
+              exit 1
+              ;;
+          esac
+
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+
+      - name: find the source ci run
+        id: run
+        env:
+          SHA: ${{ steps.commit.outputs.sha }}
+        run: |
+          # Only the push-to-main run uploads artifacts, so a commit's pull
+          # request runs are never the right source.
+          run_json="$(gh api "repos/$REPO/actions/runs?head_sha=$SHA&event=push&status=completed&per_page=100" \
+            | jq -r '[.workflow_runs[]
+                      | select(.head_branch == "main" and .path == ".github/workflows/main.yaml")]
+                     | sort_by(.run_started_at) | last // empty')"
+
+          if [[ -z "$run_json" ]]; then
+            echo "::error::no completed push-to-main run of main.yaml for $SHA"
+            exit 1
+          fi
+
+          conclusion="$(jq -r '.conclusion' <<<"$run_json")"
+          url="$(jq -r '.html_url' <<<"$run_json")"
+
+          if [[ "$conclusion" != "success" ]]; then
+            echo "::error::the latest run for $SHA concluded '$conclusion', not success: $url"
+            exit 1
+          fi
+
+          jq -r '.id' <<<"$run_json" | sed 's/^/id=/' >> "$GITHUB_OUTPUT"
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+
+      - name: download and verify artifacts
+        env:
+          RUN_ID: ${{ steps.run.outputs.id }}
+        run: |
+          mkdir -p assets
+
+          # Re-running a workflow leaves artifacts from every attempt on the
+          # same run, so keep only the newest of each name.
+          gh api --paginate "repos/$REPO/actions/runs/$RUN_ID/artifacts" \
+            | jq -r '.artifacts[] | [.name, (.id | tostring), (.size_in_bytes | tostring), (.expired | tostring)] | @tsv' \
+            | sort -t$'\t' -k1,1 -k2,2nr \
+            | awk -F'\t' '!seen[$1]++' > artifacts.tsv
+
+          printf '%s\n' $EXPECTED_ARTIFACTS | sort > expected.txt
+          cut -f1 artifacts.tsv | sort > found.txt
+
+          missing="$(comm -23 expected.txt found.txt | tr '\n' ' ')"
+          unexpected="$(comm -13 expected.txt found.txt | tr '\n' ' ')"
+
+          if [[ -n "${missing// }" ]]; then
+            echo "::error::run is missing expected artifacts: $missing"
+          fi
+          if [[ -n "${unexpected// }" ]]; then
+            echo "::error::run produced artifacts not in EXPECTED_ARTIFACTS: $unexpected"
+          fi
+          if [[ -n "${missing// }" || -n "${unexpected// }" ]]; then
+            exit 1
+          fi
+
+          while IFS=$'\t' read -r name id size expired; do
+            if [[ "$expired" == "true" ]]; then
+              echo "::error::artifact $name from run $RUN_ID has expired"
+              exit 1
+            fi
+
+            # This endpoint serves the same zip GitHub attaches to the artifact,
+            # so the release asset is byte identical to what CI produced. Do not
+            # swap this for `gh run download`, which unpacks and would force a
+            # re-zip.
+            out="assets/$name.zip"
+            gh api "repos/$REPO/actions/artifacts/$id/zip" > "$out" </dev/null
+
+            actual="$(stat -c %s "$out")"
+            if [[ "$actual" != "$size" ]]; then
+              echo "::error::$name: downloaded $actual bytes, expected $size"
+              exit 1
+            fi
+
+            if ! unzip -tqq "$out"; then
+              echo "::error::$name: downloaded file is not a valid zip"
+              exit 1
+            fi
+          done < artifacts.tsv
+
+      - name: create draft release
+        id: release
+        if: ${{ !inputs.dry_run }}
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+          SHA: ${{ steps.commit.outputs.sha }}
+        run: |
+          url="$(gh release create "$TAG" \
+            --repo "$REPO" \
+            --draft \
+            --target "$SHA" \
+            --title "libdave $VERSION" \
+            --generate-notes \
+            assets/*.zip)"
+
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+
+      - name: write summary
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+          PREV: ${{ steps.version.outputs.latest }}
+          SHA: ${{ steps.commit.outputs.sha }}
+          RUN_URL: ${{ steps.run.outputs.url }}
+          RELEASE_URL: ${{ steps.release.outputs.url }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          commits=""
+          truncated=""
+          if [[ "$PREV" != "none" ]]; then
+            compare_json="$(gh api "repos/$REPO/compare/v$PREV/cpp...$SHA")"
+            commits="$(jq -r '.commits[]
+              | "- [`\(.sha[0:9])`](\(.html_url)) \(.commit.message | split("\n")[0])"' <<<"$compare_json")"
+
+            total="$(jq -r '.total_commits' <<<"$compare_json")"
+            listed="$(jq -r '.commits | length' <<<"$compare_json")"
+            if [[ "$total" -gt "$listed" ]]; then
+              truncated="Showing the $listed most recent of $total commits."
+            fi
+          fi
+
+          {
+            echo "## libdave $VERSION"
+            echo
+            if [[ "$DRY_RUN" == "true" ]]; then
+              echo "**Dry run - nothing was created.** Every check below passed."
+            else
+              echo "Draft release: $RELEASE_URL"
+              echo
+              echo "Add a summary of the changes to the draft body, then publish it. The tag is created on publish."
+            fi
+            echo
+            echo "| | |"
+            echo "| --- | --- |"
+            echo "| tag | \`$TAG\` |"
+            echo "| commit | \`$SHA\` |"
+            echo "| source run | $RUN_URL |"
+            echo
+
+            if [[ "$PREV" == "none" ]]; then
+              echo "### Commits"
+              echo
+              echo "No previous release to compare against."
+            elif [[ -z "$commits" ]]; then
+              echo "### Commits since v$PREV"
+              echo
+              echo "None."
+            else
+              echo "### Commits since v$PREV"
+              echo
+              echo "$commits"
+              if [[ -n "$truncated" ]]; then
+                echo
+                echo "_${truncated}_"
+              fi
+            fi
+            echo
+
+            echo "| asset | bytes | sha256 |"
+            echo "| --- | ---: | --- |"
+            for f in assets/*.zip; do
+              printf '| %s | %s | `%s` |\n' \
+                "$(basename "$f")" "$(stat -c %s "$f")" "$(sha256sum "$f" | cut -d' ' -f1)"
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
