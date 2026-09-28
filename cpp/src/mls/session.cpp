@@ -84,7 +84,6 @@ void Session::Reset() noexcept
     ClearPendingState();
 
     currentState_.reset();
-    outboundCachedGroupState_.reset();
 
     protocolVersion_ = 0;
     groupId_.clear();
@@ -239,16 +238,14 @@ try {
     auto outStream = ::mlspp::tls::ostream();
     outStream << commitMessage;
 
-    // keep a copy of the commit, we can check incoming pending group commit later for a match
-    pendingGroupCommit_ = std::make_unique<::mlspp::MLSMessage>(std::move(commitMessage));
+    // cache the commit and resulting state in case we're the winning sender
+    outboundCommit_ = std::make_unique<::mlspp::MLSMessage>(std::move(commitMessage));
+    outboundCachedGroupState_ = std::make_unique<::mlspp::State>(std::move(newState));
 
     // if there were any add proposals in this commit, then we also include the welcome message
     if (welcomeMessage.secrets.size() > 0) {
         outStream << welcomeMessage;
     }
-
-    // cache the outbound state in case we're the winning sender
-    outboundCachedGroupState_ = std::make_unique<::mlspp::State>(std::move(newState));
 
     DISCORD_LOG(LS_INFO) << "Output: " << ::mlspp::bytes_ns::bytes(outStream.bytes());
 
@@ -349,20 +346,13 @@ try {
 
     auto commitMessage = ::mlspp::tls::get<::mlspp::MLSMessage>(commit);
 
-    bool isGroupInitializationCommit = pendingGroupCommit_ && commitMessage == *pendingGroupCommit_;
-    if (!currentState_ && !isGroupInitializationCommit) {
+    bool isOutboundCommit = outboundCommit_ && commitMessage == *outboundCommit_;
+    if (!currentState_ && !isOutboundCommit) {
         throw std::invalid_argument("Unexpected commit before welcome");
     }
 
     if (commitMessage.group_id() != groupId_) {
         throw std::invalid_argument("MLS commit message was for unexpected group");
-    }
-
-    // in case we're the sender of this commit
-    // we need to pull the cached state from our outbound cache
-    std::optional<::mlspp::State> optionalCachedState = std::nullopt;
-    if (outboundCachedGroupState_) {
-        optionalCachedState = *(outboundCachedGroupState_.get());
     }
 
     auto validatedMessage = stateWithProposals_->unwrap(commitMessage);
@@ -394,7 +384,14 @@ try {
         }
     }
 
-    auto newState = stateWithProposals_->handle(validatedMessage, optionalCachedState);
+    // mlspp only checks that a cached state has the expected group, epoch and leaf index, so we
+    // must only supply it for the exact commit it was prepared for
+    std::optional<::mlspp::State> cachedState;
+    if (isOutboundCommit) {
+        cachedState = *outboundCachedGroupState_;
+    }
+
+    auto newState = stateWithProposals_->handle(validatedMessage, cachedState);
 
     if (!newState) {
         throw std::runtime_error("Commit handling did not produce a new state");
@@ -404,9 +401,6 @@ try {
                          << newState->index().val << "; current epoch is " << newState->epoch();
 
     RosterMap ret = ReplaceState(std::make_unique<::mlspp::State>(std::move(*newState)));
-
-    // reset the outbound cached group since we handled the commit for this epoch
-    outboundCachedGroupState_.reset();
 
     ClearPendingState();
 
@@ -828,7 +822,9 @@ catch (const std::exception& e) {
 void Session::ClearPendingState()
 {
     pendingGroupState_.reset();
-    pendingGroupCommit_.reset();
+
+    outboundCommit_.reset();
+    outboundCachedGroupState_.reset();
 
     joinInitPrivateKey_.reset();
     joinKeyPackage_.reset();

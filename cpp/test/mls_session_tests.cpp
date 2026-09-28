@@ -29,6 +29,7 @@ constexpr uint64_t kOtherGroupId = 9876543210;
 const std::string kUserA = "1234123412341234";
 const std::string kUserB = "5678567856785678";
 const std::string kUserC = "9012901290129012";
+const std::string kUserD = "3456345634563456";
 
 // Wraps a session with a failure-callback recorder so tests can assert on the
 // precise error reported through the MLSFailureCallback.
@@ -86,6 +87,40 @@ std::optional<CommitWelcomePair> ProposeAddAndCommit(ExternalSender& externalSen
 
     auto [commit, welcome] = externalSender.SplitCommitWelcome(*commitWelcome);
     return CommitWelcomePair{std::move(commit), std::move(welcome)};
+}
+
+// Establishes a group containing `creator` and `joiner`, with `creator` having
+// processed its own group-initialization commit and `joiner` the welcome.
+bool EstablishGroup(ExternalSender& externalSender, TestSession& creator, TestSession& joiner)
+{
+    auto commitWelcome = ProposeAddAndCommit(externalSender, creator, joiner);
+    if (!commitWelcome) {
+        return false;
+    }
+
+    auto commitResult = creator.session->ProcessCommit(commitWelcome->commit);
+    if (!std::holds_alternative<RosterMap>(commitResult)) {
+        return false;
+    }
+
+    auto welcomeRoster =
+      joiner.session->ProcessWelcome(commitWelcome->welcome, {creator.userId, joiner.userId});
+    return welcomeRoster.has_value();
+}
+
+// Has `committer` prepare a commit for the given proposals, returning the commit
+// on its own (without any welcome).
+std::optional<std::vector<uint8_t>> PrepareCommit(ExternalSender& externalSender,
+                                                  TestSession& committer,
+                                                  std::vector<uint8_t> const& proposals,
+                                                  std::set<std::string> const& recognizedUserIDs)
+{
+    auto commitWelcome = committer.session->ProcessProposals(proposals, recognizedUserIDs);
+    if (!commitWelcome) {
+        return std::nullopt;
+    }
+
+    return externalSender.SplitCommitWelcome(*commitWelcome).first;
 }
 
 } // namespace
@@ -178,6 +213,89 @@ TEST_F(MlsSessionTests, SessionCommitBeforeWelcomeIsRejected)
     auto commitResult = b.session->ProcessCommit(commitWelcomeA->commit);
     EXPECT_TRUE(std::holds_alternative<failed_t>(commitResult));
     EXPECT_TRUE(b.HasFailureReason("Unexpected commit before welcome"));
+}
+
+TEST_F(MlsSessionTests, SessionOwnCommitMustMatchPreparedCommit)
+{
+    ExternalSender externalSender(kTestProtocolVersion, kTestGroupId);
+    TestSession a(kUserA);
+    TestSession b(kUserB);
+    TestSession c(kUserC);
+    TestSession d(kUserD);
+    a.InitAndSetExternalSender(externalSender, kTestGroupId);
+    b.InitAndSetExternalSender(externalSender, kTestGroupId);
+    c.InitAndSetExternalSender(externalSender, kTestGroupId);
+    d.InitAndSetExternalSender(externalSender, kTestGroupId);
+
+    ASSERT_TRUE(EstablishGroup(externalSender, a, b));
+
+    auto proposeAddC = externalSender.ProposeAdd(1, c.session->GetMarshalledKeyPackage());
+    auto firstCommit = PrepareCommit(externalSender, a, proposeAddC, {kUserA, kUserB, kUserC});
+    ASSERT_TRUE(firstCommit.has_value());
+
+    // a second commit for the same epoch replaces a's cached outbound state
+    auto proposeAddD = externalSender.ProposeAdd(1, d.session->GetMarshalledKeyPackage());
+    auto secondCommit =
+      PrepareCommit(externalSender, a, proposeAddD, {kUserA, kUserB, kUserC, kUserD});
+    ASSERT_TRUE(secondCommit.has_value());
+    ASSERT_NE(*firstCommit, *secondCommit);
+
+    ASSERT_TRUE(b.session->ProcessProposals(proposeAddC, {kUserA, kUserB, kUserC}).has_value());
+    auto commitResultB = b.session->ProcessCommit(*firstCommit);
+    auto* rosterChangeB = std::get_if<RosterMap>(&commitResultB);
+    ASSERT_NE(rosterChangeB, nullptr);
+    EXPECT_EQ(rosterChangeB->size(), 1u);
+    EXPECT_EQ(rosterChangeB->count(std::stoull(kUserC)), 1u);
+
+    // a's cached state has the group, epoch and leaf index the first commit would produce, but
+    // it is the result of the second commit
+    auto commitResultA = a.session->ProcessCommit(*firstCommit);
+    EXPECT_TRUE(std::holds_alternative<failed_t>(commitResultA));
+    // mlspp refuses to handle our own commit without a cached state
+    EXPECT_TRUE(a.HasFailureReason("Handle own commits with caching"));
+}
+
+TEST_F(MlsSessionTests, SessionOwnLatestPreparedCommitUsesCachedState)
+{
+    ExternalSender externalSender(kTestProtocolVersion, kTestGroupId);
+    TestSession a(kUserA);
+    TestSession b(kUserB);
+    TestSession c(kUserC);
+    TestSession d(kUserD);
+    a.InitAndSetExternalSender(externalSender, kTestGroupId);
+    b.InitAndSetExternalSender(externalSender, kTestGroupId);
+    c.InitAndSetExternalSender(externalSender, kTestGroupId);
+    d.InitAndSetExternalSender(externalSender, kTestGroupId);
+
+    ASSERT_TRUE(EstablishGroup(externalSender, a, b));
+
+    auto proposeAddC = externalSender.ProposeAdd(1, c.session->GetMarshalledKeyPackage());
+    auto firstCommit = PrepareCommit(externalSender, a, proposeAddC, {kUserA, kUserB, kUserC});
+    ASSERT_TRUE(firstCommit.has_value());
+
+    auto proposeAddD = externalSender.ProposeAdd(1, d.session->GetMarshalledKeyPackage());
+    auto secondCommit =
+      PrepareCommit(externalSender, a, proposeAddD, {kUserA, kUserB, kUserC, kUserD});
+    ASSERT_TRUE(secondCommit.has_value());
+
+    ASSERT_TRUE(b.session->ProcessProposals(proposeAddC, {kUserA, kUserB, kUserC}).has_value());
+    ASSERT_TRUE(
+      b.session->ProcessProposals(proposeAddD, {kUserA, kUserB, kUserC, kUserD}).has_value());
+    auto commitResultB = b.session->ProcessCommit(*secondCommit);
+    auto* rosterChangeB = std::get_if<RosterMap>(&commitResultB);
+    ASSERT_NE(rosterChangeB, nullptr);
+    EXPECT_EQ(rosterChangeB->size(), 2u);
+    EXPECT_EQ(rosterChangeB->count(std::stoull(kUserC)), 1u);
+    EXPECT_EQ(rosterChangeB->count(std::stoull(kUserD)), 1u);
+
+    auto commitResultA = a.session->ProcessCommit(*secondCommit);
+    auto* rosterChangeA = std::get_if<RosterMap>(&commitResultA);
+    ASSERT_NE(rosterChangeA, nullptr);
+    EXPECT_EQ(*rosterChangeA, *rosterChangeB);
+
+    auto authenticatorA = a.session->GetLastEpochAuthenticator();
+    ASSERT_FALSE(authenticatorA.empty());
+    EXPECT_EQ(authenticatorA, b.session->GetLastEpochAuthenticator());
 }
 
 TEST_F(MlsSessionTests, SessionCommitWithoutQueuedProposalsFails)

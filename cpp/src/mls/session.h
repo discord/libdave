@@ -118,8 +118,8 @@ private:
     std::unique_ptr<::mlspp::ExternalSender> externalSender_;
 
     std::unique_ptr<::mlspp::State> pendingGroupState_;
-    std::unique_ptr<::mlspp::MLSMessage> pendingGroupCommit_;
 
+    std::unique_ptr<::mlspp::MLSMessage> outboundCommit_;
     std::unique_ptr<::mlspp::State> outboundCachedGroupState_;
 
     std::unique_ptr<::mlspp::State> currentState_;
