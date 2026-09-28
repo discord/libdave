@@ -202,6 +202,48 @@ jobs:
             fi
           done < artifacts.tsv
 
+      - name: build release notes
+        env:
+          PREV: ${{ steps.version.outputs.latest }}
+          SHA: ${{ steps.commit.outputs.sha }}
+        run: |
+          : > notes.md
+
+          if [[ "$PREV" == "none" ]]; then
+            exit 0
+          fi
+
+          compare_json="$(gh api "repos/$REPO/compare/v$PREV/cpp...$SHA")"
+
+          # These subjects land in a public release body: drop the legacy "(#N)"
+          # suffix, which would link to an unrelated issue here, and escape angle
+          # brackets, which would otherwise be eaten as HTML tags.
+          commits="$(jq -r '
+            .commits[]
+            | "- [`\(.sha[0:9])`](\(.html_url)) "
+              + (.commit.message
+                 | split("\n")[0]
+                 | sub(" *\\(#[0-9]+\\)$"; "")
+                 | gsub("&"; "&amp;") | gsub("<"; "&lt;") | gsub(">"; "&gt;"))
+          ' <<<"$compare_json")"
+
+          if [[ -z "$commits" ]]; then
+            exit 0
+          fi
+
+          {
+            echo "## Commits"
+            echo
+            echo "$commits"
+
+            total="$(jq -r '.total_commits' <<<"$compare_json")"
+            listed="$(jq -r '.commits | length' <<<"$compare_json")"
+            if [[ "$total" -gt "$listed" ]]; then
+              echo
+              echo "_Showing the $listed most recent of $total commits._"
+            fi
+          } > notes.md
+
       - name: create draft release
         id: release
         if: ${{ !inputs.dry_run }}
@@ -209,12 +251,20 @@ jobs:
           TAG: ${{ steps.version.outputs.tag }}
           SHA: ${{ steps.commit.outputs.sha }}
         run: |
+          # gh prepends --notes-file content to the generated notes, which
+          # for this repo is just the Full Changelog link.
+          notes=()
+          if [[ -s notes.md ]]; then
+            notes=(--notes-file notes.md)
+          fi
+
           url="$(gh release create "$TAG" \
             --repo "$REPO" \
             --draft \
             --target "$SHA" \
             --title "libdave $VERSION" \
             --generate-notes \
+            "${notes[@]}" \
             assets/*.zip)"
 
           echo "url=$url" >> "$GITHUB_OUTPUT"
@@ -228,20 +278,6 @@ jobs:
           RELEASE_URL: ${{ steps.release.outputs.url }}
           DRY_RUN: ${{ inputs.dry_run }}
         run: |
-          commits=""
-          truncated=""
-          if [[ "$PREV" != "none" ]]; then
-            compare_json="$(gh api "repos/$REPO/compare/v$PREV/cpp...$SHA")"
-            commits="$(jq -r '.commits[]
-              | "- [`\(.sha[0:9])`](\(.html_url)) \(.commit.message | split("\n")[0])"' <<<"$compare_json")"
-
-            total="$(jq -r '.total_commits' <<<"$compare_json")"
-            listed="$(jq -r '.commits | length' <<<"$compare_json")"
-            if [[ "$total" -gt "$listed" ]]; then
-              truncated="Showing the $listed most recent of $total commits."
-            fi
-          fi
-
           {
             echo "## libdave $VERSION"
             echo
@@ -250,7 +286,7 @@ jobs:
             else
               echo "Draft release: $RELEASE_URL"
               echo
-              echo "Add a summary of the changes to the draft body, then publish it. The tag is created on publish."
+              echo "Add a summary of the changes above the commit list in the draft body, then publish it. The tag is created on publish."
             fi
             echo
             echo "| | |"
@@ -260,22 +296,13 @@ jobs:
             echo "| source run | $RUN_URL |"
             echo
 
-            if [[ "$PREV" == "none" ]]; then
-              echo "### Commits"
-              echo
-              echo "No previous release to compare against."
-            elif [[ -z "$commits" ]]; then
-              echo "### Commits since v$PREV"
-              echo
-              echo "None."
+            # The same list that was prepended to the draft body.
+            if [[ -s notes.md ]]; then
+              cat notes.md
+            elif [[ "$PREV" == "none" ]]; then
+              printf '## Commits\n\nNo previous release to compare against.\n'
             else
-              echo "### Commits since v$PREV"
-              echo
-              echo "$commits"
-              if [[ -n "$truncated" ]]; then
-                echo
-                echo "_${truncated}_"
-              fi
+              printf '## Commits\n\nNone since v%s.\n' "$PREV"
             fi
             echo
 
