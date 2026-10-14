@@ -331,7 +331,7 @@ bool ProcessFrameAv1(OutboundFrameProcessor& processor, ArrayView<const uint8_t>
             // Read payload size
             const uint8_t* start = frame.data() + i;
             const uint8_t* ptr = start;
-            obuPayloadSize = ReadLeb128(ptr, frame.end());
+            auto payloadSize = ReadLeb128(ptr, frame.end());
             if (!ptr) {
                 // Malformed frame
                 assert(false && "Malformed AV1 frame: invalid LEB128 size");
@@ -339,6 +339,14 @@ bool ProcessFrameAv1(OutboundFrameProcessor& processor, ArrayView<const uint8_t>
                 return false;
             }
             i += ptr - start;
+
+            if (payloadSize > frame.size() - i) {
+                // Malformed frame
+                assert(false && "Malformed AV1 frame: payload overflows frame");
+                DISCORD_LOG(LS_WARNING) << "Malformed AV1 frame: payload overflows frame";
+                return false;
+            }
+            obuPayloadSize = static_cast<size_t>(payloadSize);
         }
         else {
             // If the size is not present, the OBU extends to the end of the frame.
@@ -346,13 +354,6 @@ bool ProcessFrameAv1(OutboundFrameProcessor& processor, ArrayView<const uint8_t>
         }
 
         const auto obuPayloadIndex = i;
-
-        if (i + obuPayloadSize > frame.size()) {
-            // Malformed frame
-            assert(false && "Malformed AV1 frame: payload overflows frame");
-            DISCORD_LOG(LS_WARNING) << "Malformed AV1 frame: payload overflows frame";
-            return false;
-        }
 
         i += obuPayloadSize;
 
