@@ -174,8 +174,8 @@ if (DEFINED EMSCRIPTEN)
   add_executable(${LIB_NAME} ${LIB_HEADERS} ${LIB_SOURCES})
 
   set(OPTIMIZATION "-O3")
-  set(CONFIG "-sWASM=1 -sWASM_BIGINT -sENVIRONMENT=web -sMODULARIZE -sALLOW_MEMORY_GROWTH")
-  set(EXPORTS "-sEXPORT_ES6=1 -sEXPORT_NAME=DaveModuleFactory -sEXPORTED_RUNTIME_METHODS='[\"ccall\"]' -sEXPORTED_FUNCTIONS='[\"_malloc\", \"_free\"]'")
+  set(CONFIG "-sWASM=1 -sENVIRONMENT=web -sMODULARIZE -sALLOW_MEMORY_GROWTH")
+  set(EXPORTS "-sEXPORT_ES6=1 -sEXPORT_NAME=DaveModuleFactory -sEXPORTED_RUNTIME_METHODS='[\"ccall\", \"HEAPU8\"]' -sEXPORTED_FUNCTIONS='[\"_malloc\", \"_free\"]'")
 
   set(COMPILE_FLAGS "${OPTIMIZATION}")
   set(LINK_FLAGS "${OPTIMIZATION} ${CONFIG} ${EXPORTS} -lembind --no-entry --whole-archive --emit-tsd libdave.d.ts")

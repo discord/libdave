@@ -93,7 +93,7 @@ wasm: check-emsdk
 		-DCMAKE_TOOLCHAIN_FILE=${TOOLCHAIN_FILE} \
 		-DVCPKG_CHAINLOAD_TOOLCHAIN_FILE=${EMSCRIPTEN_TOOLCHAIN_FILE} \
 		-DVCPKG_TARGET_TRIPLET=wasm32-emscripten
-	cmake --build ${BUILD_DIR} --target libdave --config ${BUILD_TYPE}
+	emmake cmake --build ${BUILD_DIR} --target libdave --config ${BUILD_TYPE}
 
 check-emsdk:
 	@if [ -z "$$EMSDK" ]; then \

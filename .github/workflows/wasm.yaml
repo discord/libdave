@@ -1,0 +1,121 @@
+name: wasm
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["**"]
+    paths:
+      - "cpp/**"
+      - "js/**"
+      - ".github/workflows/wasm.yaml"
+  workflow_dispatch:
+
+env:
+  EMSDK_VERSION: 6.0.12
+  CMAKE_BUILD_PARALLEL_LEVEL: 4
+  VCPKG_BINARY_SOURCES: clear;files,${{ github.workspace }}/vcpkg_cache,readwrite
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    outputs:
+      tarball: ${{ steps.pack.outputs.tarball }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: "recursive"
+          fetch-depth: 0
+
+      - name: capture vcpkg revision
+        run: git -C cpp/vcpkg rev-parse HEAD > cpp/vcpkg_commit.txt
+
+      - uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/vcpkg_cache
+          key: vcpkg-wasm-${{ env.EMSDK_VERSION }}-${{ hashFiles('cpp/vcpkg_commit.txt', 'cpp/vcpkg-alts/wasm/**') }}
+          restore-keys: vcpkg-wasm-${{ env.EMSDK_VERSION }}-
+
+      - uses: emscripten-core/setup-emsdk@4528d102f7230f0e7b276855c01ea1159be0e984 # v16
+        with:
+          version: ${{ env.EMSDK_VERSION }}
+          actions-cache-folder: emsdk-cache
+
+      # em++ --emit-tsd shells out to tsc
+      - name: install typescript
+        run: npm install -g typescript@5
+
+      - name: vcpkg bootstrap
+        run: ./cpp/vcpkg/bootstrap-vcpkg.sh
+
+      - name: build wasm
+        working-directory: ./cpp
+        run: make wasm BUILD_DIR='${{ runner.temp }}/build'
+
+      - name: pack
+        id: pack
+        working-directory: ./js
+        run: |
+          cp '${{ runner.temp }}'/build/libdave.{js,wasm,d.ts} wasm/
+          npm install --omit=dev --no-package-lock --no-save
+          tarball="discordapp-libdave-$(git rev-parse HEAD).tgz"
+          mv "$(npm pack --silent)" "$tarball"
+          echo "tarball=$tarball" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: libdave-wasm
+          path: js/${{ steps.pack.outputs.tarball }}
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && vars.LIBDAVE_WASM_GCS_PATH != ''
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      id-token: write
+
+    env:
+      TARBALL: ${{ needs.build.outputs.tarball }}
+      GCS_PATH: ${{ vars.LIBDAVE_WASM_GCS_PATH }}
+
+    steps:
+      - uses: actions/download-artifact@v7
+        with:
+          name: libdave-wasm
+
+      - uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v3
+
+      # Published tarballs are pinned by sha256 downstream, so never overwrite one.
+      - name: upload
+        id: upload
+        run: |
+          if gcloud storage cp --if-generation-match=0 "$TARBALL" "$GCS_PATH/$TARBALL" 2> err.txt; then
+            echo "uploaded=true" >> "$GITHUB_OUTPUT"
+          elif grep -q -E 'HTTPError 412|pre-conditions you specified did not hold' err.txt; then
+            echo "::warning::$GCS_PATH/$TARBALL already exists, not overwriting"
+          else
+            cat err.txt >&2
+            exit 1
+          fi
+
+      - name: summary
+        if: steps.upload.outputs.uploaded == 'true'
+        run: |
+          url="https://storage.googleapis.com/${GCS_PATH#gs://}/$TARBALL"
+          sha256=$(sha256sum "$TARBALL" | cut -d' ' -f1)
+          cat >> "$GITHUB_STEP_SUMMARY" <<EOF
+          \`\`\`json
+          "url": "$url",
+          "sha256": "$sha256",
+          \`\`\`
+          EOF
