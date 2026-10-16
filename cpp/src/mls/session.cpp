@@ -117,7 +117,7 @@ try {
 
     DISCORD_LOG(LS_INFO) << "Unmarshalling MLS external sender";
 
-    DISCORD_LOG(LS_INFO) << "Sender: " << ::mlspp::bytes_ns::bytes(marshalledExternalSender);
+    DISCORD_LOG(LS_VERBOSE) << "Sender: " << ::mlspp::bytes_ns::bytes(marshalledExternalSender);
 
     externalSender_ = std::make_unique<::mlspp::ExternalSender>(
       ::mlspp::tls::get<::mlspp::ExternalSender>(marshalledExternalSender));
@@ -153,7 +153,7 @@ try {
 
     DISCORD_LOG(LS_INFO) << "Processing MLS proposals message of " << proposals.size() << " bytes";
 
-    DISCORD_LOG(LS_INFO) << "Proposals: " << ::mlspp::bytes_ns::bytes(proposals);
+    DISCORD_LOG(LS_VERBOSE) << "Proposals: " << ::mlspp::bytes_ns::bytes(proposals);
 
     ::mlspp::tls::istream inStream(proposals);
 
@@ -247,7 +247,7 @@ try {
         outStream << welcomeMessage;
     }
 
-    DISCORD_LOG(LS_INFO) << "Output: " << ::mlspp::bytes_ns::bytes(outStream.bytes());
+    DISCORD_LOG(LS_VERBOSE) << "Output: " << ::mlspp::bytes_ns::bytes(outStream.bytes());
 
     return outStream.bytes();
 }
@@ -329,8 +329,8 @@ bool Session::ValidateProposalMessage(::mlspp::AuthenticatedContent const& messa
 
 RosterVariant Session::ProcessCommit(std::vector<uint8_t> commit) noexcept
 try {
-    DISCORD_LOG(LS_INFO) << "Processing commit";
-    DISCORD_LOG(LS_INFO) << "Commit: " << ::mlspp::bytes_ns::bytes(commit);
+    DISCORD_LOG(LS_INFO) << "Processing MLS commit of " << commit.size() << " bytes";
+    DISCORD_LOG(LS_VERBOSE) << "Commit: " << ::mlspp::bytes_ns::bytes(commit);
 
     if (!stateWithProposals_) {
         if (!currentState_) {
@@ -437,7 +437,8 @@ try {
         throw std::invalid_argument("Already joined/created group");
     }
 
-    DISCORD_LOG(LS_INFO) << "Processing welcome: " << ::mlspp::bytes_ns::bytes(welcome);
+    DISCORD_LOG(LS_INFO) << "Processing MLS welcome of " << welcome.size() << " bytes";
+    DISCORD_LOG(LS_VERBOSE) << "Welcome: " << ::mlspp::bytes_ns::bytes(welcome);
 
     // unmarshal the incoming welcome
     auto unmarshalledWelcome = ::mlspp::tls::get<::mlspp::Welcome>(welcome);
@@ -650,8 +651,9 @@ try {
                                             LeafNodeExtensionsForProtocolVersion(protocolVersion_),
                                             *selfSigPrivateKey_);
 
-    DISCORD_LOG(LS_INFO) << "Generated key package: "
-                         << ::mlspp::bytes_ns::bytes(::mlspp::tls::marshal(*joinKeyPackage_));
+    DISCORD_LOG(LS_INFO) << "Generated key package";
+    DISCORD_LOG(LS_VERBOSE) << "Key package: "
+                            << ::mlspp::bytes_ns::bytes(::mlspp::tls::marshal(*joinKeyPackage_));
 }
 catch (const std::exception& e) {
     DISCORD_LOG(LS_ERROR) << "Failed to initialize join key package: " << e.what();

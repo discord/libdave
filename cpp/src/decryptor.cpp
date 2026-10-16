@@ -56,10 +56,9 @@ void Decryptor::TransitionToKeyRatchet(std::unique_ptr<IKeyRatchet> keyRatchet,
 
 void Decryptor::TransitionToPassthroughMode(bool passthroughMode, Duration transitionExpiry)
 {
-    DISCORD_LOG(LS_INFO) << "Transitioning to passthrough mode, expiry: "
-                         << transitionExpiry.count();
-
     std::lock_guard<std::mutex> lock(mutex_);
+
+    auto previousAllowPassThroughUntil = allowPassThroughUntil_;
 
     if (passthroughMode) {
         allowPassThroughUntil_ = TimePoint::max();
@@ -68,6 +67,11 @@ void Decryptor::TransitionToPassthroughMode(bool passthroughMode, Duration trans
         // Update the pass through mode expiry
         auto maxExpiry = clock_.Now() + transitionExpiry;
         allowPassThroughUntil_ = std::min(allowPassThroughUntil_, maxExpiry);
+    }
+
+    if (allowPassThroughUntil_ != previousAllowPassThroughUntil) {
+        DISCORD_LOG(LS_INFO) << "Transitioning to passthrough mode: " << passthroughMode
+                             << ", expiry: " << transitionExpiry.count();
     }
 }
 
