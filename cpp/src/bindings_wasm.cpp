@@ -1,10 +1,14 @@
+#include <atomic>
 #include <cstdint>
+#include <cstring>
 #include <memory>
 #include <set>
+#include <sstream>
 #include <vector>
 
 #include <emscripten.h>
 #include <emscripten/bind.h>
+#include <emscripten/console.h>
 #include <emscripten/val.h>
 
 #include <mls/crypto.h>
@@ -24,6 +28,49 @@ using namespace emscripten;
 
 namespace discord {
 namespace dave {
+
+namespace {
+
+std::atomic<LoggingSeverity> gMinLogSeverity = LS_INFO;
+
+void WasmLogSink(LoggingSeverity severity, const char* file, int line, const std::string& message)
+{
+    if (severity < gMinLogSeverity.load() || severity == LS_NONE) {
+        return;
+    }
+
+    if (auto separator = strrchr(file, '/')) {
+        file = separator + 1;
+    }
+
+    std::ostringstream stream;
+    stream << "(" << file << ":" << line << ") " << message;
+    auto logLine = stream.str();
+
+    switch (severity) {
+    case LS_ERROR:
+        emscripten_console_error(logLine.c_str());
+        break;
+    case LS_WARNING:
+        emscripten_console_warn(logLine.c_str());
+        break;
+    default:
+        emscripten_console_log(logLine.c_str());
+        break;
+    }
+}
+
+} // namespace
+
+void SetLogSeverity(LoggingSeverity severity)
+{
+    gMinLogSeverity = severity;
+}
+
+LoggingSeverity GetLogSeverity()
+{
+    return gMinLogSeverity.load();
+}
 
 val ToOwnedTypedArray(const uint8_t* data, size_t size)
 {
@@ -320,6 +367,8 @@ private:
 
 EMSCRIPTEN_BINDINGS(dave)
 {
+    discord::dave::SetLogSink(&discord::dave::WasmLogSink);
+
     constant("kInitTransitionId", discord::dave::kInitTransitionId);
     constant("kDisabledVersion", discord::dave::kDisabledVersion);
 
@@ -336,7 +385,16 @@ EMSCRIPTEN_BINDINGS(dave)
       .value("H265", discord::dave::Codec::H265)
       .value("AV1", discord::dave::Codec::AV1);
 
+    enum_<discord::dave::LoggingSeverity>("LoggingSeverity")
+      .value("LS_VERBOSE", discord::dave::LS_VERBOSE)
+      .value("LS_INFO", discord::dave::LS_INFO)
+      .value("LS_WARNING", discord::dave::LS_WARNING)
+      .value("LS_ERROR", discord::dave::LS_ERROR)
+      .value("LS_NONE", discord::dave::LS_NONE);
+
     function("MaxSupportedProtocolVersion", &discord::dave::MaxSupportedProtocolVersion);
+    function("SetLogSeverity", &discord::dave::SetLogSeverity);
+    function("GetLogSeverity", &discord::dave::GetLogSeverity);
 
     class_<::mlspp::SignaturePrivateKey>("SignaturePrivateKey")
       .smart_ptr<std::shared_ptr<::mlspp::SignaturePrivateKey>>("SignaturePrivateKeyPtr");
