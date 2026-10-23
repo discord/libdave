@@ -35,7 +35,7 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: ${{ github.workspace }}/vcpkg_cache
-          key: vcpkg-wasm-${{ env.EMSDK_VERSION }}-${{ hashFiles('cpp/vcpkg_commit.txt', 'cpp/vcpkg-alts/wasm/**') }}
+          key: vcpkg-wasm-${{ env.EMSDK_VERSION }}-${{ hashFiles('cpp/vcpkg_commit.txt', 'cpp/vcpkg-alts/wasm/**', 'cpp/vcpkg-alts/overlay-ports/**') }}
           restore-keys: vcpkg-wasm-${{ env.EMSDK_VERSION }}-
 
       - uses: emscripten-core/setup-emsdk@4528d102f7230f0e7b276855c01ea1159be0e984 # v16

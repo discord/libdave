@@ -7,12 +7,17 @@
       "version>=": "2023-10-13"
     },
     "gtest",
-    "mlspp"
+    {
+      "name": "mlspp",
+      "features": [
+        "boringssl"
+      ]
+    }
   ],
   "builtin-baseline": "7adc2e4d49e8d0efc07a369079faa6bc3dbb90f3",
   "vcpkg-configuration": {
     "overlay-ports": [
-      "./overlay-ports"
+      "../overlay-ports"
     ]
   }
 }
