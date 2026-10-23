@@ -119,8 +119,14 @@ try {
 
     DISCORD_LOG(LS_VERBOSE) << "Sender: " << ::mlspp::bytes_ns::bytes(marshalledExternalSender);
 
-    externalSender_ = std::make_unique<::mlspp::ExternalSender>(
-      ::mlspp::tls::get<::mlspp::ExternalSender>(marshalledExternalSender));
+    auto externalSender = ::mlspp::tls::get<::mlspp::ExternalSender>(marshalledExternalSender);
+
+    if (pendingGroupState_ && *externalSender_ == externalSender) {
+        DISCORD_LOG(LS_INFO) << "External sender unchanged, keeping pending MLS group";
+        return;
+    }
+
+    externalSender_ = std::make_unique<::mlspp::ExternalSender>(std::move(externalSender));
 
     if (!groupId_.empty()) {
         CreatePendingGroup();
@@ -662,6 +668,9 @@ catch (const std::exception& e) {
 
 void Session::CreatePendingGroup() noexcept
 try {
+    pendingGroupState_.reset();
+    ClearNextEpochState();
+
     if (groupId_.empty()) {
         DISCORD_LOG(LS_ERROR) << "Cannot create MLS group without a group ID";
         return;
@@ -825,15 +834,20 @@ void Session::ClearPendingState()
 {
     pendingGroupState_.reset();
 
-    outboundCommit_.reset();
-    outboundCachedGroupState_.reset();
-
     joinInitPrivateKey_.reset();
     joinKeyPackage_.reset();
 
     selfHPKEPrivateKey_.reset();
 
     selfLeafNode_.reset();
+
+    ClearNextEpochState();
+}
+
+void Session::ClearNextEpochState()
+{
+    outboundCommit_.reset();
+    outboundCachedGroupState_.reset();
 
     stateWithProposals_.reset();
     proposalQueue_.clear();

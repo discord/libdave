@@ -99,6 +99,7 @@ private:
     RosterMap ReplaceState(std::unique_ptr<::mlspp::State>&& state);
 
     void ClearPendingState();
+    void ClearNextEpochState();
 
     static constexpr std::string_view USER_MEDIA_KEY_BASE_LABEL = "Discord Secure Frames v0";
 

@@ -357,6 +357,48 @@ TEST_F(MlsSessionTests, SessionSetExternalSenderAfterJoinReportsError)
       a.HasFailureReason("Cannot set external sender after joining/creating an MLS group"));
 }
 
+TEST_F(MlsSessionTests, SessionChangedExternalSenderDiscardsPendingCommit)
+{
+    ExternalSender oldExternalSender(kTestProtocolVersion, kTestGroupId);
+    ExternalSender newExternalSender(kTestProtocolVersion, kTestGroupId);
+    TestSession a(kUserA);
+    TestSession b(kUserB);
+    TestSession c(kUserC);
+    a.InitAndSetExternalSender(oldExternalSender, kTestGroupId);
+    b.InitAndSetExternalSender(oldExternalSender, kTestGroupId);
+    c.InitAndSetExternalSender(newExternalSender, kTestGroupId);
+
+    auto staleCommitWelcome = ProposeAddAndCommit(oldExternalSender, a, b);
+    ASSERT_TRUE(staleCommitWelcome.has_value());
+
+    a.session->SetExternalSender(newExternalSender.GetMarshalledExternalSender());
+
+    auto staleCommitResult = a.session->ProcessCommit(staleCommitWelcome->commit);
+    EXPECT_FALSE(std::holds_alternative<RosterMap>(staleCommitResult));
+
+    auto staleProposal = oldExternalSender.ProposeAdd(0, b.session->GetMarshalledKeyPackage());
+    EXPECT_FALSE(a.session->ProcessProposals(staleProposal, {kUserA, kUserB}).has_value());
+
+    ASSERT_TRUE(EstablishGroup(newExternalSender, a, c));
+}
+
+TEST_F(MlsSessionTests, SessionRepeatedExternalSenderKeepsPendingCommit)
+{
+    ExternalSender externalSender(kTestProtocolVersion, kTestGroupId);
+    TestSession a(kUserA);
+    TestSession b(kUserB);
+    a.InitAndSetExternalSender(externalSender, kTestGroupId);
+    b.InitAndSetExternalSender(externalSender, kTestGroupId);
+
+    auto commitWelcome = ProposeAddAndCommit(externalSender, a, b);
+    ASSERT_TRUE(commitWelcome.has_value());
+
+    a.session->SetExternalSender(externalSender.GetMarshalledExternalSender());
+
+    auto commitResult = a.session->ProcessCommit(commitWelcome->commit);
+    EXPECT_TRUE(std::holds_alternative<RosterMap>(commitResult));
+}
+
 TEST_F(MlsSessionTests, SessionKeyPackageWithoutInitReportsError)
 {
     TestSession s(kUserA);
