@@ -732,10 +732,8 @@ std::unique_ptr<IKeyRatchet> Session::GetKeyRatchet(std::string const& userId) c
         return nullptr;
     }
 
-    // change the string user ID to a little endian 64 bit user ID
     auto u64userId = strtoull(userId.c_str(), nullptr, 10);
-    auto userIdBytes = ::mlspp::bytes_ns::bytes(sizeof(u64userId));
-    memcpy(userIdBytes.data(), &u64userId, sizeof(u64userId));
+    auto userIdBytes = LittleEndianBytesFrom(u64userId);
 
     // generate the base secret for the hash ratchet
     auto baseSecret = currentState_->do_export(

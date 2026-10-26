@@ -133,11 +133,8 @@ Encryptor::ResultCode Encryptor::Encrypt(MediaType mediaType,
             break;
         }
 
-        // write the truncated nonce to our temporary full nonce array
-        // (since the encryption call expects a full size nonce)
-        memcpy(nonceBuffer.data() + kAesGcm128TruncatedSyncNonceOffset,
-               &truncatedNonce,
-               kAesGcm128TruncatedSyncNonceBytes);
+        // the encryption call expects a full size nonce
+        nonceBuffer = ExpandTruncatedNonce(truncatedNonce);
 
         // encrypt the plaintext, adding the unencrypted header to the tag
         bool success = cryptor->Encrypt(
@@ -195,7 +192,7 @@ Encryptor::ResultCode Encryptor::Encrypt(MediaType mediaType,
         memcpy(supplementalBytesBuffer.data(), &supplementalBytes, sizeof(SupplementalBytesSize));
 
         // write the marker bytes, ends the frame
-        memcpy(markerBytesBuffer.data(), &kMarkerBytes, sizeof(MagicMarker));
+        memcpy(markerBytesBuffer.data(), kMarkerBytes.data(), kMarkerBytes.size());
 
         auto encryptedFrameBytes = reconstructedFrameSize + kAesGcm128TruncatedTagBytes +
           nonceSize + unencryptedRangesSize + sizeof(SupplementalBytesSize) + sizeof(MagicMarker);

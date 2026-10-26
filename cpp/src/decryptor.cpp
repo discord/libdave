@@ -196,10 +196,7 @@ Decryptor::ResultCode Decryptor::DecryptImpl(CryptorManager& cryptorManager,
     auto plaintext = encryptedFrame.GetPlaintext();
 
     // expand the truncated nonce to the full sized one needed for decryption
-    auto nonceBuffer = std::array<uint8_t, kAesGcm128NonceBytes>();
-    memcpy(nonceBuffer.data() + kAesGcm128TruncatedSyncNonceOffset,
-           &truncatedNonce,
-           kAesGcm128TruncatedSyncNonceBytes);
+    auto nonceBuffer = ExpandTruncatedNonce(truncatedNonce);
 
     auto nonceBufferView = MakeArrayView<const uint8_t>(nonceBuffer.data(), nonceBuffer.size());
 

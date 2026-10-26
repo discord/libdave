@@ -16,6 +16,18 @@ namespace mls {
     return buffer;
 }
 
+::mlspp::bytes_ns::bytes LittleEndianBytesFrom(uint64_t value) noexcept
+{
+    auto buffer = ::mlspp::bytes_ns::bytes();
+    buffer.reserve(sizeof(value));
+
+    for (size_t i = 0; i < sizeof(value); ++i) {
+        buffer.push_back(static_cast<uint8_t>(value >> (i * 8)));
+    }
+
+    return buffer;
+}
+
 uint64_t FromBigEndianBytes(const ::mlspp::bytes_ns::bytes& buffer) noexcept
 {
     uint64_t val = 0;

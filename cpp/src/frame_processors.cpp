@@ -199,7 +199,7 @@ void InboundFrameProcessor::ParseFrame(ArrayView<const uint8_t> frame)
 
     // Check the frame ends with the magic marker
     auto magicMarkerBuffer = frame.end() - sizeof(MagicMarker);
-    if (memcmp(magicMarkerBuffer, &kMarkerBytes, sizeof(MagicMarker)) != 0) {
+    if (memcmp(magicMarkerBuffer, kMarkerBytes.data(), kMarkerBytes.size()) != 0) {
         return;
     }
 
