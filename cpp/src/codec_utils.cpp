@@ -1,6 +1,5 @@
 #include "codec_utils.h"
 
-#include <cassert>
 #include <limits>
 #include <optional>
 
@@ -49,7 +48,7 @@ UnencryptedFrameHeaderSize BytesCoveringH264PPS(const uint8_t* payload,
             ++payloadBitIndex;
 
             if (zeroBitCount >= 32) {
-                assert(false && "Unexpectedly large exponential golomb encoded value");
+                REPORT_MALFORMED("Unexpectedly large exponential golomb encoded value");
                 return 0;
             }
         }
@@ -188,8 +187,7 @@ bool ProcessFrameH264(OutboundFrameProcessor& processor, ArrayView<const uint8_t
     // so we need to look at the first NAL units to determine how many bytes
     // the packetizer/depacketizer will need into the payload
     if (frame.size() < kH26XNaluShortStartSequenceSize + kH264NalUnitHeaderSize) {
-        assert(false && "H264 frame is too small to contain a NAL unit");
-        DISCORD_LOG(LS_WARNING) << "H264 frame is too small to contain a NAL unit";
+        REPORT_MALFORMED("H264 frame is too small to contain a NAL unit");
         return false;
     }
 
@@ -251,8 +249,7 @@ bool ProcessFrameH265(OutboundFrameProcessor& processor, ArrayView<const uint8_t
     // so we need to look at the first NAL units to determine how many bytes
     // the packetizer/depacketizer will need into the payload
     if (frame.size() < kH26XNaluShortStartSequenceSize + kH265NalUnitHeaderSize) {
-        assert(false && "H265 frame is too small to contain a NAL unit");
-        DISCORD_LOG(LS_WARNING) << "H265 frame is too small to contain a NAL unit";
+        REPORT_MALFORMED("H265 frame is too small to contain a NAL unit");
         return false;
     }
 
@@ -321,8 +318,7 @@ bool ProcessFrameAv1(OutboundFrameProcessor& processor, ArrayView<const uint8_t>
 
         if (i >= frame.size()) {
             // Malformed frame
-            assert(false && "Malformed AV1 frame: header overflows frame");
-            DISCORD_LOG(LS_WARNING) << "Malformed AV1 frame: header overflows frame";
+            REPORT_MALFORMED("Malformed AV1 frame: header overflows frame");
             return false;
         }
 
@@ -334,16 +330,14 @@ bool ProcessFrameAv1(OutboundFrameProcessor& processor, ArrayView<const uint8_t>
             auto payloadSize = ReadLeb128(ptr, frame.end());
             if (!ptr) {
                 // Malformed frame
-                assert(false && "Malformed AV1 frame: invalid LEB128 size");
-                DISCORD_LOG(LS_WARNING) << "Malformed AV1 frame: invalid LEB128 size";
+                REPORT_MALFORMED("Malformed AV1 frame: invalid LEB128 size");
                 return false;
             }
             i += ptr - start;
 
             if (payloadSize > frame.size() - i) {
                 // Malformed frame
-                assert(false && "Malformed AV1 frame: payload overflows frame");
-                DISCORD_LOG(LS_WARNING) << "Malformed AV1 frame: payload overflows frame";
+                REPORT_MALFORMED("Malformed AV1 frame: payload overflows frame");
                 return false;
             }
             obuPayloadSize = static_cast<size_t>(payloadSize);

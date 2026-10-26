@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <cassert>
 #include <chrono>
 #include <map>
 #include <optional>
@@ -9,6 +10,20 @@
 #include <vector>
 
 #include <dave/dave_interfaces.h>
+#include <dave/logger.h>
+
+// Malformed encoder output is recovered from, so fuzzing must be able to reach past it
+#ifdef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
+#define DEBUG_ASSERT_MALFORMED(message)
+#else
+#define DEBUG_ASSERT_MALFORMED(message) assert(false && message)
+#endif
+
+#define REPORT_MALFORMED(message)           \
+    do {                                    \
+        DISCORD_LOG(LS_WARNING) << message; \
+        DEBUG_ASSERT_MALFORMED(message);    \
+    } while (0)
 
 namespace discord {
 namespace dave {
