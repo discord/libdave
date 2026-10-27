@@ -10,7 +10,7 @@ export class DaveSessionManager {
 
   private readonly selfUserId: string;
   private readonly groupId: string;
-  private readonly recognizedUserIds: Set<string> = new Set();
+  private readonly userIds: Set<string> = new Set();
   private readonly daveProtocolTransitions: Map<number, number> = new Map();
   private latestPreparedTransitionVersion: number = 0;
 
@@ -31,13 +31,15 @@ export class DaveSessionManager {
 
   // Add an allowed user to the connection
   public createUser(userId: string) {
-    this.recognizedUserIds.add(userId);
+    this.userIds.add(userId);
+    this.mlsSession.AddRecognizedUser(userId);
     this._setupKeyRatchetForUser(userId, this.latestPreparedTransitionVersion);
   }
 
   // Remove an allowed user from the connection
   public destroyUser(userId: string) {
-    this.recognizedUserIds.delete(userId);
+    this.userIds.delete(userId);
+    this.mlsSession.RemoveRecognizedUser(userId);
     // TODO: Signal the relevant media code that a user has left the call and the associated Encryptor/Decryptor should be destroyed
   }
 
@@ -75,7 +77,7 @@ export class DaveSessionManager {
 
   // Opcode MLS_PROPOSALS (27)
   public onMLSProposals(proposals: ArrayBuffer) {
-    const commitWelcome = this.mlsSession.ProcessProposals(proposals, this._getRecognizedUserIDs());
+    const commitWelcome = this.mlsSession.ProcessProposals(proposals);
     if (commitWelcome) {
       this._sendMLSCommitWelcome(commitWelcome);
     }
@@ -101,7 +103,7 @@ export class DaveSessionManager {
 
   // Opcode MLS_WELCOME (30)
   public onMLSWelcome(transitionId: number, welcome: ArrayBuffer) {
-    const roster = this.mlsSession.ProcessWelcome(welcome, this._getRecognizedUserIDs());
+    const roster = this.mlsSession.ProcessWelcome(welcome);
     const joinedGroup = roster != null;
 
     if (joinedGroup) {
@@ -181,10 +183,6 @@ export class DaveSessionManager {
     this._setupKeyRatchetForUser(this.selfUserId, protocolVersion);
   }
 
-  private _getRecognizedUserIDs(): string[] {
-    return Array.from(this.recognizedUserIds).concat([this.selfUserId]);
-  }
-
   private _makeUserKeyRatchet(userId: string, protocolVersion: number): any {
     if (protocolVersion === this.dave.kDisabledVersion) {
       return null;
@@ -194,11 +192,7 @@ export class DaveSessionManager {
   }
 
   private _prepareDaveProtocolRatchets(transitionID: number, protocolVersion: number): void {
-    for (const userId of this._getRecognizedUserIDs()) {
-      if (userId === this.selfUserId) {
-        continue;
-      }
-
+    for (const userId of this.userIds) {
       this._setupKeyRatchetForUser(userId, protocolVersion);
     }
 

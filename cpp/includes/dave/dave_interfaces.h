@@ -106,15 +106,18 @@ public:
 
     virtual void SetExternalSender(std::vector<uint8_t> const& externalSenderPackage) noexcept = 0;
 
+    // Users the signaling layer has announced as connected to the call. The local user is always
+    // recognized. The set lasts for the session's lifetime, across Init and Reset. Call these in
+    // signaling order on the same thread or queue as the Process* calls.
+    virtual void AddRecognizedUser(std::string const& userId) noexcept = 0;
+    virtual void RemoveRecognizedUser(std::string const& userId) noexcept = 0;
+
     virtual std::optional<std::vector<uint8_t>> ProcessProposals(
-      std::vector<uint8_t> proposals,
-      std::set<std::string> const& recognizedUserIDs) noexcept = 0;
+      std::vector<uint8_t> proposals) noexcept = 0;
 
     virtual RosterVariant ProcessCommit(std::vector<uint8_t> commit) noexcept = 0;
 
-    virtual std::optional<RosterMap> ProcessWelcome(
-      std::vector<uint8_t> welcome,
-      std::set<std::string> const& recognizedUserIDs) noexcept = 0;
+    virtual std::optional<RosterMap> ProcessWelcome(std::vector<uint8_t> welcome) noexcept = 0;
 
     virtual std::vector<uint8_t> GetMarshalledKeyPackage() noexcept = 0;
 

@@ -183,15 +183,16 @@ public:
         }
     }
 
-    val ProcessProposals(val proposals, val recognizedUserIDs)
+    void AddRecognizedUser(std::string userId) { session_->AddRecognizedUser(userId); }
+
+    void RemoveRecognizedUser(std::string userId) { session_->RemoveRecognizedUser(userId); }
+
+    val ProcessProposals(val proposals)
     {
         std::vector<uint8_t> proposalsVec =
           emscripten::convertJSArrayToNumberVector<uint8_t>(proposals);
-        auto recognizedUserIDsVec = emscripten::vecFromJSArray<std::string>(recognizedUserIDs);
-        auto recognizedUserIDsSet =
-          std::set<std::string>(recognizedUserIDsVec.begin(), recognizedUserIDsVec.end());
 
-        auto bytes = session_->ProcessProposals(proposalsVec, recognizedUserIDsSet);
+        auto bytes = session_->ProcessProposals(proposalsVec);
         if (!bytes) {
             return val::null();
         }
@@ -222,13 +223,10 @@ public:
         return result;
     }
 
-    val ProcessWelcome(val welcome, val recognizedUserIDs)
+    val ProcessWelcome(val welcome)
     {
         auto welcomeVec = emscripten::convertJSArrayToNumberVector<uint8_t>(welcome);
-        auto recognizedUserIDsVec = emscripten::vecFromJSArray<std::string>(recognizedUserIDs);
-        auto recognizedUserIDsSet =
-          std::set<std::string>(recognizedUserIDsVec.begin(), recognizedUserIDsVec.end());
-        auto roster = session_->ProcessWelcome(welcomeVec, recognizedUserIDsSet);
+        auto roster = session_->ProcessWelcome(welcomeVec);
         if (!roster) {
             return val::null();
         }
@@ -414,6 +412,8 @@ EMSCRIPTEN_BINDINGS(dave)
       .function("GetLastEpochAuthenticator",
                 &discord::dave::mls::SessionWrapper::GetLastEpochAuthenticator)
       .function("SetExternalSender", &discord::dave::mls::SessionWrapper::SetExternalSender)
+      .function("AddRecognizedUser", &discord::dave::mls::SessionWrapper::AddRecognizedUser)
+      .function("RemoveRecognizedUser", &discord::dave::mls::SessionWrapper::RemoveRecognizedUser)
       .function("ProcessProposals", &discord::dave::mls::SessionWrapper::ProcessProposals)
       .function("ProcessCommit", &discord::dave::mls::SessionWrapper::ProcessCommit)
       .function("ProcessWelcome", &discord::dave::mls::SessionWrapper::ProcessWelcome)

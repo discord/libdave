@@ -164,21 +164,32 @@ void daveSessionSetExternalSender(DAVESessionHandle sessionHandle,
     session->SetExternalSender(externalSenderVec);
 }
 
+void daveSessionAddRecognizedUser(DAVESessionHandle sessionHandle, const char* userId)
+{
+    ARG_CHECK(sessionHandle);
+    ARG_CHECK(userId);
+    auto session = reinterpret_cast<discord::dave::mls::ISession*>(sessionHandle);
+    session->AddRecognizedUser(userId);
+}
+
+void daveSessionRemoveRecognizedUser(DAVESessionHandle sessionHandle, const char* userId)
+{
+    ARG_CHECK(sessionHandle);
+    ARG_CHECK(userId);
+    auto session = reinterpret_cast<discord::dave::mls::ISession*>(sessionHandle);
+    session->RemoveRecognizedUser(userId);
+}
+
 void daveSessionProcessProposals(DAVESessionHandle sessionHandle,
                                  const uint8_t* proposals,
                                  size_t length,
-                                 const char** recognizedUserIds,
-                                 size_t recognizedUserIdsLength,
                                  uint8_t** commitWelcomeBytes,
                                  size_t* commitWelcomeBytesLength)
 {
     ARG_CHECK(sessionHandle);
     auto session = reinterpret_cast<discord::dave::mls::ISession*>(sessionHandle);
     auto proposalsVec = std::vector<uint8_t>(proposals, proposals + length);
-    auto recognizedUserIdsSet =
-      std::set<std::string>(recognizedUserIds, recognizedUserIds + recognizedUserIdsLength);
-    auto result =
-      session->ProcessProposals(std::move(proposalsVec), std::move(recognizedUserIdsSet));
+    auto result = session->ProcessProposals(std::move(proposalsVec));
 
     if (result) {
         CopyVectorToOutputBuffer(*result, commitWelcomeBytes, commitWelcomeBytesLength);
@@ -201,17 +212,13 @@ DAVECommitResultHandle daveSessionProcessCommit(DAVESessionHandle sessionHandle,
 
 DAVEWelcomeResultHandle daveSessionProcessWelcome(DAVESessionHandle sessionHandle,
                                                   const uint8_t* welcome,
-                                                  size_t length,
-                                                  const char** recognizedUserIds,
-                                                  size_t recognizedUserIdsLength)
+                                                  size_t length)
 {
     ARG_CHECK_RET(sessionHandle, nullptr);
     auto session = reinterpret_cast<discord::dave::mls::ISession*>(sessionHandle);
     auto welcomeVec = std::vector<uint8_t>(welcome, welcome + length);
-    auto recognizedUserIdsSet =
-      std::set<std::string>(recognizedUserIds, recognizedUserIds + recognizedUserIdsLength);
 
-    auto result = session->ProcessWelcome(std::move(welcomeVec), std::move(recognizedUserIdsSet));
+    auto result = session->ProcessWelcome(std::move(welcomeVec));
     if (!result) {
         return nullptr;
     }

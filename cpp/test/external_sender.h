@@ -13,6 +13,9 @@ public:
 
     std::vector<uint8_t> GetMarshalledExternalSender();
     std::vector<uint8_t> ProposeAdd(uint32_t epoch, std::vector<uint8_t> const& keyPackage);
+    std::vector<uint8_t> ProposeRemove(uint32_t epoch, uint32_t leafIndex);
+    std::vector<uint8_t> Revoke(std::vector<uint8_t> const& proposals);
+    static std::vector<::mlspp::MLSMessage> ParseProposals(std::vector<uint8_t> const& proposals);
     std::pair<std::vector<uint8_t>, std::vector<uint8_t>> SplitCommitWelcome(
       std::vector<uint8_t> const& commitWelcome);
 

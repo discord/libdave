@@ -59,15 +59,15 @@ public:
     virtual void SetExternalSender(
       std::vector<uint8_t> const& externalSenderPackage) noexcept override;
 
+    virtual void AddRecognizedUser(std::string const& userId) noexcept override;
+    virtual void RemoveRecognizedUser(std::string const& userId) noexcept override;
+
     virtual std::optional<std::vector<uint8_t>> ProcessProposals(
-      std::vector<uint8_t> proposals,
-      std::set<std::string> const& recognizedUserIDs) noexcept override;
+      std::vector<uint8_t> proposals) noexcept override;
 
     virtual RosterVariant ProcessCommit(std::vector<uint8_t> commit) noexcept override;
 
-    virtual std::optional<RosterMap> ProcessWelcome(
-      std::vector<uint8_t> welcome,
-      std::set<std::string> const& recognizedUserIDs) noexcept override;
+    virtual std::optional<RosterMap> ProcessWelcome(std::vector<uint8_t> welcome) noexcept override;
 
     virtual std::vector<uint8_t> GetMarshalledKeyPackage() noexcept override;
 
@@ -88,13 +88,11 @@ private:
 
     void CreatePendingGroup() noexcept;
 
-    bool IsRecognizedUserID(const ::mlspp::Credential& cred,
-                            std::set<std::string> const& recognizedUserIDs) const;
+    bool IsRecognizedUserID(const ::mlspp::Credential& cred) const;
     bool ValidateProposalMessage(::mlspp::AuthenticatedContent const& message,
-                                 ::mlspp::State const& targetState,
-                                 std::set<std::string> const& recognizedUserIDs) const;
-    bool VerifyWelcomeState(::mlspp::State const& state,
-                            std::set<std::string> const& recognizedUserIDs) const;
+                                 ::mlspp::State const& targetState) const;
+    bool ValidateQueuedProposals() const;
+    bool VerifyWelcomeState(::mlspp::State const& state) const;
 
     RosterMap ReplaceState(std::unique_ptr<::mlspp::State>&& state);
 
@@ -107,6 +105,7 @@ private:
     std::vector<uint8_t> groupId_;
     std::string signingKeyId_;
     std::string selfUserId_;
+    std::set<std::string> recognizedUserIDs_;
     KeyPairContextType keyPairContext_{nullptr};
 
     std::unique_ptr<::mlspp::LeafNode> selfLeafNode_;

@@ -56,6 +56,46 @@ std::vector<uint8_t> ExternalSender::ProposeAdd(uint32_t epoch,
     return out.bytes();
 }
 
+std::vector<uint8_t> ExternalSender::ProposeRemove(uint32_t epoch, uint32_t leafIndex)
+{
+    auto proposal = ::mlspp::Proposal{::mlspp::Remove{::mlspp::LeafIndex{leafIndex}}};
+    auto message = ::mlspp::external_proposal(
+      ciphersuite_, groupId_, epoch, proposal, signerIndex_, *signaturePrivateKey_);
+
+    bool isRevoke = false;
+    ::mlspp::tls::ostream out;
+    out << isRevoke;
+    out << std::vector<::mlspp::MLSMessage>{message};
+    return out.bytes();
+}
+
+std::vector<uint8_t> ExternalSender::Revoke(std::vector<uint8_t> const& proposals)
+{
+    std::vector<::mlspp::bytes_ns::bytes> refs;
+    for (const auto& message : ParseProposals(proposals)) {
+        const auto& publicMessage = ::mlspp::tls::var::get<::mlspp::PublicMessage>(message.message);
+        refs.push_back(ciphersuite_.ref(publicMessage.authenticated_content()));
+    }
+
+    bool isRevoke = true;
+    ::mlspp::tls::ostream out;
+    out << isRevoke;
+    out << refs;
+    return out.bytes();
+}
+
+std::vector<::mlspp::MLSMessage> ExternalSender::ParseProposals(
+  std::vector<uint8_t> const& proposals)
+{
+    auto proposalsBytes = ::mlspp::bytes_ns::bytes(proposals);
+    ::mlspp::tls::istream in(proposalsBytes);
+    bool isRevoke = false;
+    std::vector<::mlspp::MLSMessage> messages;
+    in >> isRevoke;
+    in >> messages;
+    return messages;
+}
+
 std::pair<std::vector<uint8_t>, std::vector<uint8_t>> ExternalSender::SplitCommitWelcome(
   std::vector<uint8_t> const& commitWelcome)
 {

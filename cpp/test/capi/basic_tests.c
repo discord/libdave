@@ -404,6 +404,8 @@ static int TestSession(void)
     // Init sessions
     daveSessionInit(sessionA, 1, groupId, userA);
     daveSessionInit(sessionB, 1, groupId, userB);
+    daveSessionAddRecognizedUser(sessionA, userB);
+    daveSessionAddRecognizedUser(sessionB, userA);
     TEST_ASSERT_EQ(daveSessionGetProtocolVersion(sessionA), 1, "Protocol version should be 1");
     TEST_ASSERT_EQ(daveSessionGetProtocolVersion(sessionB), 1, "Protocol version should be 1");
 
@@ -433,14 +435,8 @@ static int TestSession(void)
     printf("Processing proposals\n");
     uint8_t* commitWelcome = NULL;
     size_t commitWelcomeLength = 0;
-    const char* recognizedUserIds[] = {userA, userB};
-    daveSessionProcessProposals(sessionA,
-                                proposal,
-                                proposalLength,
-                                recognizedUserIds,
-                                2,
-                                &commitWelcome,
-                                &commitWelcomeLength);
+    daveSessionProcessProposals(
+      sessionA, proposal, proposalLength, &commitWelcome, &commitWelcomeLength);
     TEST_ASSERT(commitWelcome != NULL, "Failed to process proposals");
     daveFree(proposal);
 
@@ -465,7 +461,7 @@ static int TestSession(void)
     printf("Processing commit welcome\n");
     DAVECommitResultHandle commitResult = daveSessionProcessCommit(sessionA, commit, commitLength);
     DAVEWelcomeResultHandle welcomeResult =
-      daveSessionProcessWelcome(sessionB, welcome, welcomeLength, recognizedUserIds, 2);
+      daveSessionProcessWelcome(sessionB, welcome, welcomeLength);
     daveFree(commit);
     daveFree(welcome);
 

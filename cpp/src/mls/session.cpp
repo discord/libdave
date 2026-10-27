@@ -1,5 +1,6 @@
 #include "session.h"
 
+#include <algorithm>
 #include <cstring>
 #include <thread>
 #include <vector>
@@ -141,9 +142,18 @@ catch (const std::exception& e) {
     return;
 }
 
+void Session::AddRecognizedUser(std::string const& userId) noexcept
+{
+    recognizedUserIDs_.insert(userId);
+}
+
+void Session::RemoveRecognizedUser(std::string const& userId) noexcept
+{
+    recognizedUserIDs_.erase(userId);
+}
+
 std::optional<std::vector<uint8_t>> Session::ProcessProposals(
-  std::vector<uint8_t> proposals,
-  std::set<std::string> const& recognizedUserIDs) noexcept
+  std::vector<uint8_t> proposals) noexcept
 try {
     if (!pendingGroupState_ && !currentState_) {
         DISCORD_LOG(LS_ERROR)
@@ -207,8 +217,7 @@ try {
             auto validatedMessage = stateWithProposals_->unwrap(proposalMessage);
 
             if (!ValidateProposalMessage(validatedMessage.authenticated_content(),
-                                         *stateWithProposals_,
-                                         recognizedUserIDs)) {
+                                         *stateWithProposals_)) {
                 return std::nullopt;
             }
 
@@ -222,6 +231,10 @@ try {
               std::move(ref),
             });
         }
+    }
+
+    if (!ValidateQueuedProposals()) {
+        return std::nullopt;
     }
 
     // generate a commit
@@ -263,8 +276,7 @@ catch (const std::exception& e) {
     return std::nullopt;
 }
 
-bool Session::IsRecognizedUserID(const ::mlspp::Credential& cred,
-                                 std::set<std::string> const& recognizedUserIDs) const
+bool Session::IsRecognizedUserID(const ::mlspp::Credential& cred) const
 {
     std::string uid = UserCredentialToString(cred, protocolVersion_);
     if (uid.empty()) {
@@ -272,7 +284,7 @@ bool Session::IsRecognizedUserID(const ::mlspp::Credential& cred,
         return false;
     }
 
-    if (recognizedUserIDs.find(uid) == recognizedUserIDs.end()) {
+    if (uid != selfUserId_ && recognizedUserIDs_.find(uid) == recognizedUserIDs_.end()) {
         DISCORD_LOG(LS_ERROR) << "Attempted to verify credential for unrecognized user ID: " << uid;
         return false;
     }
@@ -281,8 +293,7 @@ bool Session::IsRecognizedUserID(const ::mlspp::Credential& cred,
 }
 
 bool Session::ValidateProposalMessage(::mlspp::AuthenticatedContent const& message,
-                                      ::mlspp::State const& targetState,
-                                      std::set<std::string> const& recognizedUserIDs) const
+                                      ::mlspp::State const& targetState) const
 {
     if (message.wire_format != ::mlspp::WireFormat::mls_public_message) {
         DISCORD_LOG(LS_ERROR) << "MLS proposal message must be PublicMessage";
@@ -314,7 +325,7 @@ bool Session::ValidateProposalMessage(::mlspp::AuthenticatedContent const& messa
     case ::mlspp::ProposalType::add: {
         const auto& credential =
           ::mlspp::tls::var::get<::mlspp::Add>(proposal.content).key_package.leaf_node.credential;
-        if (!IsRecognizedUserID(credential, recognizedUserIDs)) {
+        if (!IsRecognizedUserID(credential)) {
             DISCORD_LOG(LS_ERROR) << "MLS add proposal must be for recognized user";
             TRACK_MLS_ERROR("Unexpected user ID in add proposal");
             return false;
@@ -331,6 +342,15 @@ bool Session::ValidateProposalMessage(::mlspp::AuthenticatedContent const& messa
     }
 
     return true;
+}
+
+bool Session::ValidateQueuedProposals() const
+{
+    return std::all_of(
+      proposalQueue_.begin(), proposalQueue_.end(), [&](const QueuedProposal& queued) {
+          return ValidateProposalMessage(queued.content.authenticated_content(),
+                                         *stateWithProposals_);
+      });
 }
 
 RosterVariant Session::ProcessCommit(std::vector<uint8_t> commit) noexcept
@@ -383,11 +403,28 @@ try {
     const auto& commitContent =
       ::mlspp::tls::var::get<::mlspp::Commit>(authenticatedContent.content.content);
 
+    std::vector<::mlspp::ProposalRef> committedRefs;
     for (const auto& proposalOrRef : commitContent.proposals) {
         if (::mlspp::tls::variant<::mlspp::ProposalOrRefType>::type(proposalOrRef.content) !=
             ::mlspp::ProposalOrRefType::reference) {
             throw std::invalid_argument("Unexpected non-ref proposal");
         }
+        committedRefs.push_back(
+          ::mlspp::tls::var::get<::mlspp::ProposalRef>(proposalOrRef.content));
+    }
+
+    auto isCommitted = [&committedRefs](const QueuedProposal& queued) {
+        return std::find(committedRefs.begin(), committedRefs.end(), queued.ref) !=
+          committedRefs.end();
+    };
+    if (committedRefs.size() != proposalQueue_.size() ||
+        !std::all_of(proposalQueue_.begin(), proposalQueue_.end(), isCommitted)) {
+        throw std::invalid_argument("Commit does not cover queued proposals");
+    }
+
+    // with coverage checked, the queued proposals are exactly what this commit applies
+    if (!ValidateQueuedProposals()) {
+        throw std::invalid_argument("Commit includes invalid queued proposal");
     }
 
     // mlspp only checks that a cached state has the expected group, epoch and leaf index, so we
@@ -401,6 +438,16 @@ try {
 
     if (!newState) {
         throw std::runtime_error("Commit handling did not produce a new state");
+    }
+
+    const auto committer =
+      ::mlspp::tls::var::get<::mlspp::MemberSender>(authenticatedContent.content.sender.sender)
+        .sender;
+    const auto committerLeafBefore = stateWithProposals_->tree().leaf_node(committer);
+    const auto committerLeafAfter = newState->tree().leaf_node(committer);
+    if (!committerLeafBefore || !committerLeafAfter ||
+        committerLeafBefore->credential != committerLeafAfter->credential) {
+        throw std::invalid_argument("Commit changes committer credential");
     }
 
     DISCORD_LOG(LS_INFO) << "Successfully processed MLS commit, updating state; our leaf index is "
@@ -418,9 +465,7 @@ catch (const std::exception& e) {
     return failed_t{};
 }
 
-std::optional<RosterMap> Session::ProcessWelcome(
-  std::vector<uint8_t> welcome,
-  std::set<std::string> const& recognizedUserIDs) noexcept
+std::optional<RosterMap> Session::ProcessWelcome(std::vector<uint8_t> welcome) noexcept
 try {
     if (!joinKeyPackage_) {
         throw std::invalid_argument("Missing join key package");
@@ -460,7 +505,7 @@ try {
       std::map<::mlspp::bytes_ns::bytes, ::mlspp::bytes_ns::bytes>());
 
     // perform application-level verification of the new state
-    if (!VerifyWelcomeState(*newState, recognizedUserIDs)) {
+    if (!VerifyWelcomeState(*newState)) {
         DISCORD_LOG(LS_ERROR) << "Group received in MLS welcome is not valid";
 
         return std::nullopt;
@@ -538,8 +583,7 @@ RosterMap Session::ReplaceState(std::unique_ptr<::mlspp::State>&& state)
     return changeMap;
 }
 
-bool Session::VerifyWelcomeState(::mlspp::State const& state,
-                                 std::set<std::string> const& recognizedUserIDs) const
+bool Session::VerifyWelcomeState(::mlspp::State const& state) const
 {
     if (!externalSender_) {
         DISCORD_LOG(LS_ERROR) << "Cannot verify MLS welcome without an external sender";
@@ -574,7 +618,7 @@ bool Session::VerifyWelcomeState(::mlspp::State const& state,
     }
 
     for (const auto& leaf : state.roster()) {
-        if (!IsRecognizedUserID(leaf.credential, recognizedUserIDs)) {
+        if (!IsRecognizedUserID(leaf.credential)) {
             DISCORD_LOG(LS_ERROR) << "MLS welcome lists unrecognized user ID";
             TRACK_MLS_ERROR("Welcome message lists unrecognized user ID");
             return false;

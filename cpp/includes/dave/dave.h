@@ -268,12 +268,26 @@ DAVE_EXPORT void daveSessionSetExternalSender(DAVESessionHandle session,
                                               size_t length);
 
 /**
+ * @brief Marks a user as connected to the call, allowing them in the MLS group
+ * @param session Session handle
+ * @param userId User ID string
+ * @note The local user is always recognized. Recognized users persist across daveSessionInit and
+ * daveSessionReset. Call in signaling order on the same thread as the other session calls.
+ */
+DAVE_EXPORT void daveSessionAddRecognizedUser(DAVESessionHandle session, const char* userId);
+
+/**
+ * @brief Marks a user as no longer connected to the call
+ * @param session Session handle
+ * @param userId User ID string
+ */
+DAVE_EXPORT void daveSessionRemoveRecognizedUser(DAVESessionHandle session, const char* userId);
+
+/**
  * @brief Processes MLS proposals and generates commit/welcome messages
  * @param session Session handle
  * @param proposals Serialized proposal bytes
  * @param length Length of proposals
- * @param recognizedUserIds Array of recognized user ID strings
- * @param recognizedUserIdsLength Number of recognized user IDs
  * @param[out] commitWelcomeBytes Output buffer to commit/welcome message bytes (caller must free
  * with daveFree)
  * @param[out] commitWelcomeBytesLength Output length of the commit/welcome message
@@ -281,8 +295,6 @@ DAVE_EXPORT void daveSessionSetExternalSender(DAVESessionHandle session,
 DAVE_EXPORT void daveSessionProcessProposals(DAVESessionHandle session,
                                              const uint8_t* proposals,
                                              size_t length,
-                                             const char** recognizedUserIds,
-                                             size_t recognizedUserIdsLength,
                                              uint8_t** commitWelcomeBytes,
                                              size_t* commitWelcomeBytesLength);
 
@@ -302,15 +314,11 @@ DAVE_EXPORT DAVECommitResultHandle daveSessionProcessCommit(DAVESessionHandle se
  * @param session Session handle
  * @param welcome Serialized welcome message bytes
  * @param length Length of welcome message
- * @param recognizedUserIds Array of recognized user ID strings
- * @param recognizedUserIdsLength Number of recognized user IDs
  * @return Welcome result handle. Must be destroyed with daveWelcomeResultDestroy()
  */
 DAVE_EXPORT DAVEWelcomeResultHandle daveSessionProcessWelcome(DAVESessionHandle session,
                                                               const uint8_t* welcome,
-                                                              size_t length,
-                                                              const char** recognizedUserIds,
-                                                              size_t recognizedUserIdsLength);
+                                                              size_t length);
 
 /**
  * @brief Gets the marshalled MLS key package for this session

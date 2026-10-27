@@ -1,15 +1,20 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <initializer_list>
+#include <map>
 #include <memory>
 #include <optional>
-#include <set>
 #include <string>
 #include <utility>
 #include <variant>
 #include <vector>
 
+#include <mls/state.h>
+
+#include "mls/parameters.h"
 #include "mls/session.h"
+#include "mls/user_credential.h"
 
 #include "dave_test.h"
 #include "external_sender.h"
@@ -49,6 +54,18 @@ struct TestSession {
         session->SetExternalSender(externalSender.GetMarshalledExternalSender());
     }
 
+    void Recognize(std::initializer_list<std::string> userIds)
+    {
+        for (const auto& recognizedUserId : userIds) {
+            session->AddRecognizedUser(recognizedUserId);
+        }
+    }
+
+    void Forget(std::string const& forgottenUserId)
+    {
+        session->RemoveRecognizedUser(forgottenUserId);
+    }
+
     bool HasFailureReason(std::string const& reason) const
     {
         return std::find(failureReasons.begin(), failureReasons.end(), reason) !=
@@ -79,8 +96,8 @@ std::optional<CommitWelcomePair> ProposeAddAndCommit(ExternalSender& externalSen
 
     auto proposal = externalSender.ProposeAdd(0, keyPackage);
 
-    auto commitWelcome =
-      creator.session->ProcessProposals(proposal, {creator.userId, joiner.userId});
+    creator.Recognize({joiner.userId});
+    auto commitWelcome = creator.session->ProcessProposals(proposal);
     if (!commitWelcome) {
         return std::nullopt;
     }
@@ -103,25 +120,87 @@ bool EstablishGroup(ExternalSender& externalSender, TestSession& creator, TestSe
         return false;
     }
 
-    auto welcomeRoster =
-      joiner.session->ProcessWelcome(commitWelcome->welcome, {creator.userId, joiner.userId});
-    return welcomeRoster.has_value();
+    joiner.Recognize({creator.userId});
+    return joiner.session->ProcessWelcome(commitWelcome->welcome).has_value();
 }
 
 // Has `committer` prepare a commit for the given proposals, returning the commit
 // on its own (without any welcome).
 std::optional<std::vector<uint8_t>> PrepareCommit(ExternalSender& externalSender,
                                                   TestSession& committer,
-                                                  std::vector<uint8_t> const& proposals,
-                                                  std::set<std::string> const& recognizedUserIDs)
+                                                  std::vector<uint8_t> const& proposals)
 {
-    auto commitWelcome = committer.session->ProcessProposals(proposals, recognizedUserIDs);
+    auto commitWelcome = committer.session->ProcessProposals(proposals);
     if (!commitWelcome) {
         return std::nullopt;
     }
 
     return externalSender.SplitCommitWelcome(*commitWelcome).first;
 }
+
+std::vector<uint8_t> ProposeAddFor(ExternalSender& externalSender,
+                                   uint32_t epoch,
+                                   TestSession& joiner)
+{
+    return externalSender.ProposeAdd(epoch, joiner.session->GetMarshalledKeyPackage());
+}
+
+// An MLS member driven directly through mlspp, for commits a Session would never produce.
+struct RawMember {
+    explicit RawMember(std::string const& userId)
+      : suite(mls::CiphersuiteForProtocolVersion(kTestProtocolVersion))
+      , signaturePrivateKey(::mlspp::SignaturePrivateKey::generate(suite))
+      , hpkePrivateKey(::mlspp::HPKEPrivateKey::generate(suite))
+      , initPrivateKey(::mlspp::HPKEPrivateKey::generate(suite))
+      , keyPackage(
+          suite,
+          initPrivateKey.public_key,
+          ::mlspp::LeafNode(suite,
+                            hpkePrivateKey.public_key,
+                            signaturePrivateKey.public_key,
+                            mls::CreateUserCredential(userId, kTestProtocolVersion),
+                            mls::LeafNodeCapabilitiesForProtocolVersion(kTestProtocolVersion),
+                            ::mlspp::Lifetime::create_default(),
+                            mls::LeafNodeExtensionsForProtocolVersion(kTestProtocolVersion),
+                            signaturePrivateKey),
+          mls::LeafNodeExtensionsForProtocolVersion(kTestProtocolVersion),
+          signaturePrivateKey)
+    {
+    }
+
+    void JoinFromWelcome(std::vector<uint8_t> const& welcome)
+    {
+        state.emplace(initPrivateKey,
+                      hpkePrivateKey,
+                      signaturePrivateKey,
+                      keyPackage,
+                      ::mlspp::tls::get<::mlspp::Welcome>(welcome),
+                      std::nullopt,
+                      std::map<::mlspp::bytes_ns::bytes, ::mlspp::bytes_ns::bytes>());
+    }
+
+    void HandleProposals(std::vector<uint8_t> const& proposals)
+    {
+        for (const auto& message : ExternalSender::ParseProposals(proposals)) {
+            state->handle(message);
+        }
+    }
+
+    std::vector<uint8_t> CommitWithCredential(::mlspp::Credential credential)
+    {
+        auto opts = ::mlspp::CommitOpts{{}, true, true, {std::move(credential), {}, {}}};
+        auto [commit, welcome, next] =
+          state->commit(::mlspp::hpke::random_bytes(suite.secret_size()), opts, {});
+        return ::mlspp::tls::marshal(commit);
+    }
+
+    ::mlspp::CipherSuite suite;
+    ::mlspp::SignaturePrivateKey signaturePrivateKey;
+    ::mlspp::HPKEPrivateKey hpkePrivateKey;
+    ::mlspp::HPKEPrivateKey initPrivateKey;
+    ::mlspp::KeyPackage keyPackage;
+    std::optional<::mlspp::State> state;
+};
 
 } // namespace
 
@@ -144,7 +223,8 @@ TEST_F(MlsSessionTests, SessionJoinViaCommitAndWelcome)
     ASSERT_NE(commitRoster, nullptr);
     EXPECT_EQ(commitRoster->size(), 2u);
 
-    auto welcomeRoster = b.session->ProcessWelcome(commitWelcome->welcome, {kUserA, kUserB});
+    b.Recognize({kUserA});
+    auto welcomeRoster = b.session->ProcessWelcome(commitWelcome->welcome);
     ASSERT_TRUE(welcomeRoster.has_value());
     EXPECT_EQ(welcomeRoster->size(), 2u);
 
@@ -166,7 +246,7 @@ TEST_F(MlsSessionTests, SessionWelcomeRejectsUnrecognizedRosterUser)
     ASSERT_TRUE(commitWelcome.has_value());
 
     // the welcomed group's roster includes user A, which b does not recognize
-    auto welcomeRoster = b.session->ProcessWelcome(commitWelcome->welcome, {kUserB});
+    auto welcomeRoster = b.session->ProcessWelcome(commitWelcome->welcome);
     EXPECT_FALSE(welcomeRoster.has_value());
     EXPECT_TRUE(b.HasFailureReason("Welcome message lists unrecognized user ID"));
 }
@@ -184,7 +264,8 @@ TEST_F(MlsSessionTests, SessionWelcomeRejectsMismatchedGroupId)
     auto commitWelcome = ProposeAddAndCommit(externalSender, a, b);
     ASSERT_TRUE(commitWelcome.has_value());
 
-    auto welcomeRoster = b.session->ProcessWelcome(commitWelcome->welcome, {kUserA, kUserB});
+    b.Recognize({kUserA});
+    auto welcomeRoster = b.session->ProcessWelcome(commitWelcome->welcome);
     EXPECT_FALSE(welcomeRoster.has_value());
     EXPECT_TRUE(b.HasFailureReason("Unexpected group ID in Welcome"));
 }
@@ -228,27 +309,30 @@ TEST_F(MlsSessionTests, SessionOwnCommitMustMatchPreparedCommit)
     d.InitAndSetExternalSender(externalSender, kTestGroupId);
 
     ASSERT_TRUE(EstablishGroup(externalSender, a, b));
+    a.Recognize({kUserC, kUserD});
+    b.Recognize({kUserC, kUserD});
 
     auto proposeAddC = externalSender.ProposeAdd(1, c.session->GetMarshalledKeyPackage());
-    auto firstCommit = PrepareCommit(externalSender, a, proposeAddC, {kUserA, kUserB, kUserC});
+    auto firstCommit = PrepareCommit(externalSender, a, proposeAddC);
     ASSERT_TRUE(firstCommit.has_value());
 
     // a second commit for the same epoch replaces a's cached outbound state
     auto proposeAddD = externalSender.ProposeAdd(1, d.session->GetMarshalledKeyPackage());
-    auto secondCommit =
-      PrepareCommit(externalSender, a, proposeAddD, {kUserA, kUserB, kUserC, kUserD});
+    auto secondCommit = PrepareCommit(externalSender, a, proposeAddD);
     ASSERT_TRUE(secondCommit.has_value());
     ASSERT_NE(*firstCommit, *secondCommit);
 
-    ASSERT_TRUE(b.session->ProcessProposals(proposeAddC, {kUserA, kUserB, kUserC}).has_value());
+    ASSERT_TRUE(b.session->ProcessProposals(proposeAddC).has_value());
     auto commitResultB = b.session->ProcessCommit(*firstCommit);
     auto* rosterChangeB = std::get_if<RosterMap>(&commitResultB);
     ASSERT_NE(rosterChangeB, nullptr);
     EXPECT_EQ(rosterChangeB->size(), 1u);
     EXPECT_EQ(rosterChangeB->count(std::stoull(kUserC)), 1u);
 
-    // a's cached state has the group, epoch and leaf index the first commit would produce, but
-    // it is the result of the second commit
+    // revoking d's add leaves a's queue matching the first commit again, while a's cached state
+    // has the group, epoch and leaf index the first commit would produce but comes from the
+    // commit a prepared after the revoke
+    ASSERT_TRUE(a.session->ProcessProposals(externalSender.Revoke(proposeAddD)).has_value());
     auto commitResultA = a.session->ProcessCommit(*firstCommit);
     EXPECT_TRUE(std::holds_alternative<failed_t>(commitResultA));
     // mlspp refuses to handle our own commit without a cached state
@@ -268,19 +352,19 @@ TEST_F(MlsSessionTests, SessionOwnLatestPreparedCommitUsesCachedState)
     d.InitAndSetExternalSender(externalSender, kTestGroupId);
 
     ASSERT_TRUE(EstablishGroup(externalSender, a, b));
+    a.Recognize({kUserC, kUserD});
+    b.Recognize({kUserC, kUserD});
 
     auto proposeAddC = externalSender.ProposeAdd(1, c.session->GetMarshalledKeyPackage());
-    auto firstCommit = PrepareCommit(externalSender, a, proposeAddC, {kUserA, kUserB, kUserC});
+    auto firstCommit = PrepareCommit(externalSender, a, proposeAddC);
     ASSERT_TRUE(firstCommit.has_value());
 
     auto proposeAddD = externalSender.ProposeAdd(1, d.session->GetMarshalledKeyPackage());
-    auto secondCommit =
-      PrepareCommit(externalSender, a, proposeAddD, {kUserA, kUserB, kUserC, kUserD});
+    auto secondCommit = PrepareCommit(externalSender, a, proposeAddD);
     ASSERT_TRUE(secondCommit.has_value());
 
-    ASSERT_TRUE(b.session->ProcessProposals(proposeAddC, {kUserA, kUserB, kUserC}).has_value());
-    ASSERT_TRUE(
-      b.session->ProcessProposals(proposeAddD, {kUserA, kUserB, kUserC, kUserD}).has_value());
+    ASSERT_TRUE(b.session->ProcessProposals(proposeAddC).has_value());
+    ASSERT_TRUE(b.session->ProcessProposals(proposeAddD).has_value());
     auto commitResultB = b.session->ProcessCommit(*secondCommit);
     auto* rosterChangeB = std::get_if<RosterMap>(&commitResultB);
     ASSERT_NE(rosterChangeB, nullptr);
@@ -338,6 +422,251 @@ TEST_F(MlsSessionTests, SessionCommitWithoutAnyStateIsIgnored)
     EXPECT_TRUE(fresh.HasFailureReason("Received commit without state"));
 }
 
+TEST_F(MlsSessionTests, SessionCommitRejectsAddOfNoLongerRecognizedUser)
+{
+    ExternalSender externalSender(kTestProtocolVersion, kTestGroupId);
+    TestSession a(kUserA);
+    TestSession b(kUserB);
+    TestSession c(kUserC);
+    a.InitAndSetExternalSender(externalSender, kTestGroupId);
+    b.InitAndSetExternalSender(externalSender, kTestGroupId);
+    c.InitAndSetExternalSender(externalSender, kTestGroupId);
+    ASSERT_TRUE(EstablishGroup(externalSender, a, b));
+
+    a.Recognize({kUserC});
+    b.Recognize({kUserC});
+    auto proposal = ProposeAddFor(externalSender, 1, c);
+    ASSERT_TRUE(a.session->ProcessProposals(proposal).has_value());
+    auto commitWelcomeB = b.session->ProcessProposals(proposal);
+    ASSERT_TRUE(commitWelcomeB.has_value());
+    auto commitB = externalSender.SplitCommitWelcome(*commitWelcomeB).first;
+
+    // c disconnects after a queued its add, but the gateway announces b's commit anyway
+    a.Forget(kUserC);
+    auto commitResult = a.session->ProcessCommit(commitB);
+    EXPECT_TRUE(std::holds_alternative<failed_t>(commitResult));
+    EXPECT_TRUE(a.HasFailureReason("Unexpected user ID in add proposal"));
+    EXPECT_TRUE(a.HasFailureReason("Commit includes invalid queued proposal"));
+
+    auto controlResult = b.session->ProcessCommit(commitB);
+    auto* controlRoster = std::get_if<RosterMap>(&controlResult);
+    ASSERT_NE(controlRoster, nullptr);
+    EXPECT_EQ(controlRoster->count(std::stoull(kUserC)), 1u);
+}
+
+TEST_F(MlsSessionTests, SessionOwnCommitRejectsAddOfNoLongerRecognizedUser)
+{
+    ExternalSender externalSender(kTestProtocolVersion, kTestGroupId);
+    TestSession a(kUserA);
+    TestSession b(kUserB);
+    TestSession c(kUserC);
+    a.InitAndSetExternalSender(externalSender, kTestGroupId);
+    b.InitAndSetExternalSender(externalSender, kTestGroupId);
+    c.InitAndSetExternalSender(externalSender, kTestGroupId);
+    ASSERT_TRUE(EstablishGroup(externalSender, a, b));
+
+    a.Recognize({kUserC});
+    auto commitWelcomeA = a.session->ProcessProposals(ProposeAddFor(externalSender, 1, c));
+    ASSERT_TRUE(commitWelcomeA.has_value());
+    auto commitA = externalSender.SplitCommitWelcome(*commitWelcomeA).first;
+
+    a.Forget(kUserC);
+    auto commitResult = a.session->ProcessCommit(commitA);
+    EXPECT_TRUE(std::holds_alternative<failed_t>(commitResult));
+    EXPECT_TRUE(a.HasFailureReason("Unexpected user ID in add proposal"));
+    EXPECT_TRUE(a.HasFailureReason("Commit includes invalid queued proposal"));
+}
+
+TEST_F(MlsSessionTests, SessionCommitAcceptsExistingUnrecognizedLeaf)
+{
+    ExternalSender externalSender(kTestProtocolVersion, kTestGroupId);
+    TestSession a(kUserA);
+    TestSession b(kUserB);
+    TestSession c(kUserC);
+    a.InitAndSetExternalSender(externalSender, kTestGroupId);
+    b.InitAndSetExternalSender(externalSender, kTestGroupId);
+    c.InitAndSetExternalSender(externalSender, kTestGroupId);
+    ASSERT_TRUE(EstablishGroup(externalSender, a, b));
+
+    // b is no longer recognized, but the commit leaves b's leaf in place
+    a.Forget(kUserB);
+    a.Recognize({kUserC});
+    auto commitWelcomeA = a.session->ProcessProposals(ProposeAddFor(externalSender, 1, c));
+    ASSERT_TRUE(commitWelcomeA.has_value());
+    auto commitA = externalSender.SplitCommitWelcome(*commitWelcomeA).first;
+
+    auto commitResult = a.session->ProcessCommit(commitA);
+    EXPECT_TRUE(std::holds_alternative<RosterMap>(commitResult));
+}
+
+TEST_F(MlsSessionTests, SessionProposalsDoNotCommitStaleQueuedAdd)
+{
+    ExternalSender externalSender(kTestProtocolVersion, kTestGroupId);
+    TestSession a(kUserA);
+    TestSession b(kUserB);
+    TestSession c(kUserC);
+    a.InitAndSetExternalSender(externalSender, kTestGroupId);
+    b.InitAndSetExternalSender(externalSender, kTestGroupId);
+    c.InitAndSetExternalSender(externalSender, kTestGroupId);
+
+    a.Recognize({kUserB, kUserC});
+    auto proposalC = ProposeAddFor(externalSender, 0, c);
+    ASSERT_TRUE(a.session->ProcessProposals(proposalC).has_value());
+
+    // c disconnects before an unrelated add arrives
+    a.Forget(kUserC);
+    auto commitWelcome = a.session->ProcessProposals(ProposeAddFor(externalSender, 0, b));
+    EXPECT_FALSE(commitWelcome.has_value());
+    EXPECT_TRUE(a.HasFailureReason("Unexpected user ID in add proposal"));
+
+    // once the voice gateway revokes c's add, a commits the remaining add of b
+    commitWelcome = a.session->ProcessProposals(externalSender.Revoke(proposalC));
+    ASSERT_TRUE(commitWelcome.has_value());
+    auto commit = externalSender.SplitCommitWelcome(*commitWelcome).first;
+    auto commitResult = a.session->ProcessCommit(commit);
+    auto* roster = std::get_if<RosterMap>(&commitResult);
+    ASSERT_NE(roster, nullptr);
+    EXPECT_EQ(roster->size(), 2u);
+    EXPECT_EQ(roster->count(std::stoull(kUserC)), 0u);
+}
+
+TEST_F(MlsSessionTests, SessionRevokeDoesNotCommitStaleQueuedAdd)
+{
+    ExternalSender externalSender(kTestProtocolVersion, kTestGroupId);
+    TestSession a(kUserA);
+    TestSession b(kUserB);
+    TestSession c(kUserC);
+    a.InitAndSetExternalSender(externalSender, kTestGroupId);
+    b.InitAndSetExternalSender(externalSender, kTestGroupId);
+    c.InitAndSetExternalSender(externalSender, kTestGroupId);
+
+    a.Recognize({kUserB, kUserC});
+    auto proposalB = ProposeAddFor(externalSender, 0, b);
+    ASSERT_TRUE(a.session->ProcessProposals(ProposeAddFor(externalSender, 0, c)).has_value());
+    ASSERT_TRUE(a.session->ProcessProposals(proposalB).has_value());
+
+    // rebuilding after the revoke must not commit c's add now that c has disconnected
+    a.Forget(kUserC);
+    auto commitWelcome = a.session->ProcessProposals(externalSender.Revoke(proposalB));
+    EXPECT_FALSE(commitWelcome.has_value());
+    EXPECT_TRUE(a.HasFailureReason("Unexpected user ID in add proposal"));
+}
+
+TEST_F(MlsSessionTests, SessionCommitRejectsMissingQueuedProposal)
+{
+    ExternalSender externalSender(kTestProtocolVersion, kTestGroupId);
+    TestSession a(kUserA);
+    TestSession b(kUserB);
+    TestSession c(kUserC);
+    TestSession d(kUserD);
+    a.InitAndSetExternalSender(externalSender, kTestGroupId);
+    b.InitAndSetExternalSender(externalSender, kTestGroupId);
+    c.InitAndSetExternalSender(externalSender, kTestGroupId);
+    d.InitAndSetExternalSender(externalSender, kTestGroupId);
+    ASSERT_TRUE(EstablishGroup(externalSender, a, b));
+
+    a.Recognize({kUserC, kUserD});
+    b.Recognize({kUserC, kUserD});
+    auto proposalC = ProposeAddFor(externalSender, 1, c);
+    ASSERT_TRUE(a.session->ProcessProposals(proposalC).has_value());
+    ASSERT_TRUE(a.session->ProcessProposals(ProposeAddFor(externalSender, 1, d)).has_value());
+
+    // b never saw the add of d, so its commit leaves out a proposal a has queued
+    auto commitWelcomeB = b.session->ProcessProposals(proposalC);
+    ASSERT_TRUE(commitWelcomeB.has_value());
+    auto commitB = externalSender.SplitCommitWelcome(*commitWelcomeB).first;
+
+    auto commitResult = a.session->ProcessCommit(commitB);
+    EXPECT_TRUE(std::holds_alternative<failed_t>(commitResult));
+    EXPECT_TRUE(a.HasFailureReason("Commit does not cover queued proposals"));
+}
+
+TEST_F(MlsSessionTests, SessionCommitRejectsCommitterCredentialChange)
+{
+    ExternalSender externalSender(kTestProtocolVersion, kTestGroupId);
+    TestSession a(kUserA);
+    TestSession c(kUserC);
+    RawMember b(kUserB);
+    a.InitAndSetExternalSender(externalSender, kTestGroupId);
+    c.InitAndSetExternalSender(externalSender, kTestGroupId);
+
+    a.Recognize({kUserB, kUserC, kUserD});
+    auto commitWelcome = a.session->ProcessProposals(
+      externalSender.ProposeAdd(0, ::mlspp::tls::marshal(b.keyPackage)));
+    ASSERT_TRUE(commitWelcome.has_value());
+    auto [commit, welcome] = externalSender.SplitCommitWelcome(*commitWelcome);
+    ASSERT_TRUE(std::holds_alternative<RosterMap>(a.session->ProcessCommit(commit)));
+    b.JoinFromWelcome(welcome);
+
+    auto proposalC = ProposeAddFor(externalSender, 1, c);
+    ASSERT_TRUE(a.session->ProcessProposals(proposalC).has_value());
+    b.HandleProposals(proposalC);
+
+    // b's update path swaps its leaf credential over to d
+    auto commitB = b.CommitWithCredential(mls::CreateUserCredential(kUserD, kTestProtocolVersion));
+
+    auto commitResult = a.session->ProcessCommit(commitB);
+    EXPECT_TRUE(std::holds_alternative<failed_t>(commitResult));
+    EXPECT_TRUE(a.HasFailureReason("Commit changes committer credential"));
+}
+
+TEST_F(MlsSessionTests, SessionCommitRemovingDisconnectedUserIsAccepted)
+{
+    ExternalSender externalSender(kTestProtocolVersion, kTestGroupId);
+    TestSession a(kUserA);
+    TestSession b(kUserB);
+    TestSession c(kUserC);
+    a.InitAndSetExternalSender(externalSender, kTestGroupId);
+    b.InitAndSetExternalSender(externalSender, kTestGroupId);
+    c.InitAndSetExternalSender(externalSender, kTestGroupId);
+    ASSERT_TRUE(EstablishGroup(externalSender, a, b));
+
+    a.Recognize({kUserC});
+    b.Recognize({kUserC});
+    auto proposalC = ProposeAddFor(externalSender, 1, c);
+    ASSERT_TRUE(a.session->ProcessProposals(proposalC).has_value());
+    auto commitWelcomeB = b.session->ProcessProposals(proposalC);
+    ASSERT_TRUE(commitWelcomeB.has_value());
+    auto [addCommit, welcome] = externalSender.SplitCommitWelcome(*commitWelcomeB);
+    ASSERT_TRUE(std::holds_alternative<RosterMap>(a.session->ProcessCommit(addCommit)));
+    ASSERT_TRUE(std::holds_alternative<RosterMap>(b.session->ProcessCommit(addCommit)));
+    c.Recognize({kUserA, kUserB});
+    ASSERT_TRUE(c.session->ProcessWelcome(welcome).has_value());
+
+    // c disconnects and the voice gateway proposes its removal; a commit with a remove carries an
+    // update path that rewrites the committer's leaf
+    a.Forget(kUserC);
+    b.Forget(kUserC);
+    auto removeC = externalSender.ProposeRemove(2, 2);
+    ASSERT_TRUE(a.session->ProcessProposals(removeC).has_value());
+    auto removeCommitWelcome = b.session->ProcessProposals(removeC);
+    ASSERT_TRUE(removeCommitWelcome.has_value());
+    auto removeCommit = ::mlspp::tls::marshal(
+      ::mlspp::tls::get<::mlspp::MLSMessage>(::mlspp::bytes_ns::bytes(*removeCommitWelcome)));
+
+    auto commitResultA = a.session->ProcessCommit(removeCommit);
+    auto* rosterChangeA = std::get_if<RosterMap>(&commitResultA);
+    ASSERT_NE(rosterChangeA, nullptr);
+    ASSERT_EQ(rosterChangeA->count(std::stoull(kUserC)), 1u);
+    EXPECT_TRUE(rosterChangeA->at(std::stoull(kUserC)).empty());
+    EXPECT_TRUE(std::holds_alternative<RosterMap>(b.session->ProcessCommit(removeCommit)));
+    EXPECT_EQ(a.session->GetLastEpochAuthenticator(), b.session->GetLastEpochAuthenticator());
+}
+
+TEST_F(MlsSessionTests, SessionRecognizedUsersPersistAcrossReinit)
+{
+    ExternalSender externalSender(kTestProtocolVersion, kTestGroupId);
+    TestSession a(kUserA);
+    TestSession b(kUserB);
+    a.InitAndSetExternalSender(externalSender, kTestGroupId);
+    b.InitAndSetExternalSender(externalSender, kTestGroupId);
+    a.Recognize({kUserB});
+
+    // an in-call MLS reset re-initializes the session without new client connects
+    a.InitAndSetExternalSender(externalSender, kTestGroupId);
+    EXPECT_TRUE(a.session->ProcessProposals(ProposeAddFor(externalSender, 0, b)).has_value());
+}
+
 TEST_F(MlsSessionTests, SessionSetExternalSenderAfterJoinReportsError)
 {
     ExternalSender externalSender(kTestProtocolVersion, kTestGroupId);
@@ -377,7 +706,7 @@ TEST_F(MlsSessionTests, SessionChangedExternalSenderDiscardsPendingCommit)
     EXPECT_FALSE(std::holds_alternative<RosterMap>(staleCommitResult));
 
     auto staleProposal = oldExternalSender.ProposeAdd(0, b.session->GetMarshalledKeyPackage());
-    EXPECT_FALSE(a.session->ProcessProposals(staleProposal, {kUserA, kUserB}).has_value());
+    EXPECT_FALSE(a.session->ProcessProposals(staleProposal).has_value());
 
     ASSERT_TRUE(EstablishGroup(newExternalSender, a, c));
 }
@@ -410,7 +739,7 @@ TEST_F(MlsSessionTests, SessionKeyPackageWithoutInitReportsError)
 TEST_F(MlsSessionTests, SessionProposalsWithoutStateReportsError)
 {
     TestSession s(kUserA);
-    auto result = s.session->ProcessProposals({}, {});
+    auto result = s.session->ProcessProposals({});
     EXPECT_FALSE(result.has_value());
     EXPECT_TRUE(s.HasFailureReason("Got proposal without MLS state"));
 }
