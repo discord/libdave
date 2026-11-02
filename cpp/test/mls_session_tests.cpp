@@ -296,7 +296,7 @@ TEST_F(MlsSessionTests, SessionCommitBeforeWelcomeIsRejected)
     EXPECT_TRUE(b.HasFailureReason("Unexpected commit before welcome"));
 }
 
-TEST_F(MlsSessionTests, SessionOwnCommitMustMatchPreparedCommit)
+TEST_F(MlsSessionTests, SessionOwnEarlierPreparedCommitUsesItsCachedState)
 {
     ExternalSender externalSender(kTestProtocolVersion, kTestGroupId);
     TestSession a(kUserA);
@@ -316,11 +316,15 @@ TEST_F(MlsSessionTests, SessionOwnCommitMustMatchPreparedCommit)
     auto firstCommit = PrepareCommit(externalSender, a, proposeAddC);
     ASSERT_TRUE(firstCommit.has_value());
 
-    // a second commit for the same epoch replaces a's cached outbound state
     auto proposeAddD = externalSender.ProposeAdd(1, d.session->GetMarshalledKeyPackage());
     auto secondCommit = PrepareCommit(externalSender, a, proposeAddD);
     ASSERT_TRUE(secondCommit.has_value());
     ASSERT_NE(*firstCommit, *secondCommit);
+
+    // d leaves before being added, so the first commit again covers exactly what is queued
+    auto revokeAddD = externalSender.Revoke(proposeAddD);
+    auto thirdCommit = PrepareCommit(externalSender, a, revokeAddD);
+    ASSERT_TRUE(thirdCommit.has_value());
 
     ASSERT_TRUE(b.session->ProcessProposals(proposeAddC).has_value());
     auto commitResultB = b.session->ProcessCommit(*firstCommit);
@@ -329,14 +333,122 @@ TEST_F(MlsSessionTests, SessionOwnCommitMustMatchPreparedCommit)
     EXPECT_EQ(rosterChangeB->size(), 1u);
     EXPECT_EQ(rosterChangeB->count(std::stoull(kUserC)), 1u);
 
-    // revoking d's add leaves a's queue matching the first commit again, while a's cached state
-    // has the group, epoch and leaf index the first commit would produce but comes from the
-    // commit a prepared after the revoke
-    ASSERT_TRUE(a.session->ProcessProposals(externalSender.Revoke(proposeAddD)).has_value());
+    // the voice gateway selected a's first commit even though a has since prepared two more
     auto commitResultA = a.session->ProcessCommit(*firstCommit);
-    EXPECT_TRUE(std::holds_alternative<failed_t>(commitResultA));
-    // mlspp refuses to handle our own commit without a cached state
+    auto* rosterChangeA = std::get_if<RosterMap>(&commitResultA);
+    ASSERT_NE(rosterChangeA, nullptr);
+    EXPECT_EQ(*rosterChangeA, *rosterChangeB);
+
+    auto authenticatorA = a.session->GetLastEpochAuthenticator();
+    ASSERT_FALSE(authenticatorA.empty());
+    EXPECT_EQ(authenticatorA, b.session->GetLastEpochAuthenticator());
+
+    // retained commits do not outlive the epoch they were prepared for
+    EXPECT_TRUE(std::holds_alternative<failed_t>(a.session->ProcessCommit(*secondCommit)));
+}
+
+TEST_F(MlsSessionTests, SessionOwnCommitReferencingRevokedProposalIsRejected)
+{
+    ExternalSender externalSender(kTestProtocolVersion, kTestGroupId);
+    TestSession a(kUserA);
+    TestSession b(kUserB);
+    TestSession c(kUserC);
+    TestSession d(kUserD);
+    a.InitAndSetExternalSender(externalSender, kTestGroupId);
+    b.InitAndSetExternalSender(externalSender, kTestGroupId);
+    c.InitAndSetExternalSender(externalSender, kTestGroupId);
+    d.InitAndSetExternalSender(externalSender, kTestGroupId);
+
+    ASSERT_TRUE(EstablishGroup(externalSender, a, b));
+    a.Recognize({kUserC, kUserD});
+    b.Recognize({kUserC, kUserD});
+
+    auto proposeAddC = externalSender.ProposeAdd(1, c.session->GetMarshalledKeyPackage());
+    auto firstCommit = PrepareCommit(externalSender, a, proposeAddC);
+    ASSERT_TRUE(firstCommit.has_value());
+
+    auto proposeAddD = externalSender.ProposeAdd(1, d.session->GetMarshalledKeyPackage());
+    auto secondCommit = PrepareCommit(externalSender, a, proposeAddD);
+    ASSERT_TRUE(secondCommit.has_value());
+
+    auto revokeAddD = externalSender.Revoke(proposeAddD);
+    auto thirdCommit = PrepareCommit(externalSender, a, revokeAddD);
+    ASSERT_TRUE(thirdCommit.has_value());
+
+    ASSERT_TRUE(b.session->ProcessProposals(proposeAddC).has_value());
+    ASSERT_TRUE(b.session->ProcessProposals(proposeAddD).has_value());
+    ASSERT_TRUE(b.session->ProcessProposals(revokeAddD).has_value());
+
+    // the second commit still references the add of d, which has since been revoked, so a must
+    // reject it just as any other member does
+    EXPECT_TRUE(std::holds_alternative<failed_t>(a.session->ProcessCommit(*secondCommit)));
+    EXPECT_TRUE(a.HasFailureReason("Commit does not cover queued proposals"));
+    EXPECT_TRUE(std::holds_alternative<failed_t>(b.session->ProcessCommit(*secondCommit)));
+    EXPECT_TRUE(b.HasFailureReason("Commit does not cover queued proposals"));
+
+    // the first commit only references the add of c and remains valid after the revocation
+    auto commitResultB = b.session->ProcessCommit(*firstCommit);
+    auto* rosterChangeB = std::get_if<RosterMap>(&commitResultB);
+    ASSERT_NE(rosterChangeB, nullptr);
+    EXPECT_EQ(rosterChangeB->size(), 1u);
+    EXPECT_EQ(rosterChangeB->count(std::stoull(kUserC)), 1u);
+
+    auto commitResultA = a.session->ProcessCommit(*firstCommit);
+    auto* rosterChangeA = std::get_if<RosterMap>(&commitResultA);
+    ASSERT_NE(rosterChangeA, nullptr);
+    EXPECT_EQ(*rosterChangeA, *rosterChangeB);
+
+    auto authenticatorA = a.session->GetLastEpochAuthenticator();
+    ASSERT_FALSE(authenticatorA.empty());
+    EXPECT_EQ(authenticatorA, b.session->GetLastEpochAuthenticator());
+}
+
+TEST_F(MlsSessionTests, SessionRetainsBoundedOutboundCommits)
+{
+    ExternalSender externalSender(kTestProtocolVersion, kTestGroupId);
+    TestSession a(kUserA);
+    TestSession b(kUserB);
+    TestSession c(kUserC);
+    a.InitAndSetExternalSender(externalSender, kTestGroupId);
+    b.InitAndSetExternalSender(externalSender, kTestGroupId);
+    c.InitAndSetExternalSender(externalSender, kTestGroupId);
+
+    ASSERT_TRUE(EstablishGroup(externalSender, a, b));
+    a.Recognize({kUserC});
+    b.Recognize({kUserC});
+
+    // alternately proposing and revoking the same add makes a prepare a distinct commit each time
+    auto proposeAddC = externalSender.ProposeAdd(1, c.session->GetMarshalledKeyPackage());
+    auto revokeAddC = externalSender.Revoke(proposeAddC);
+
+    // two more commits than the cap, ending on a revocation so nothing is left queued
+    std::vector<std::vector<uint8_t>> commits;
+    while (commits.size() < mls::Session::kMaxRetainedOutboundCommits + 2) {
+        auto const& proposals = commits.size() % 2 == 0 ? proposeAddC : revokeAddC;
+        auto commit = PrepareCommit(externalSender, a, proposals);
+        ASSERT_TRUE(commit.has_value());
+        commits.push_back(std::move(*commit));
+    }
+
+    // the empty commits following each revocation cover a's queue; the first was evicted
+    EXPECT_TRUE(std::holds_alternative<failed_t>(a.session->ProcessCommit(commits[1])));
     EXPECT_TRUE(a.HasFailureReason("Handle own commits with caching"));
+
+    ASSERT_TRUE(b.session->ProcessProposals(proposeAddC).has_value());
+    ASSERT_TRUE(b.session->ProcessProposals(revokeAddC).has_value());
+    auto commitResultB = b.session->ProcessCommit(commits[3]);
+    auto* rosterChangeB = std::get_if<RosterMap>(&commitResultB);
+    ASSERT_NE(rosterChangeB, nullptr);
+    EXPECT_TRUE(rosterChangeB->empty());
+
+    auto commitResultA = a.session->ProcessCommit(commits[3]);
+    auto* rosterChangeA = std::get_if<RosterMap>(&commitResultA);
+    ASSERT_NE(rosterChangeA, nullptr);
+    EXPECT_TRUE(rosterChangeA->empty());
+
+    auto authenticatorA = a.session->GetLastEpochAuthenticator();
+    ASSERT_FALSE(authenticatorA.empty());
+    EXPECT_EQ(authenticatorA, b.session->GetLastEpochAuthenticator());
 }
 
 TEST_F(MlsSessionTests, SessionOwnLatestPreparedCommitUsesCachedState)

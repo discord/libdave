@@ -32,6 +32,7 @@ namespace dave {
 namespace mls {
 
 struct QueuedProposal;
+struct OutboundCommit;
 
 class Session final : public ISession {
 public:
@@ -40,6 +41,8 @@ public:
             MLSFailureCallback callback) noexcept;
 
     virtual ~Session() noexcept;
+
+    static constexpr size_t kMaxRetainedOutboundCommits = 16;
 
     virtual void Init(
       ProtocolVersion version,
@@ -119,8 +122,7 @@ private:
 
     std::unique_ptr<::mlspp::State> pendingGroupState_;
 
-    std::unique_ptr<::mlspp::MLSMessage> outboundCommit_;
-    std::unique_ptr<::mlspp::State> outboundCachedGroupState_;
+    std::list<OutboundCommit> outboundCommits_;
 
     std::unique_ptr<::mlspp::State> currentState_;
     RosterMap roster_;

@@ -102,13 +102,19 @@ std::pair<std::vector<uint8_t>, std::vector<uint8_t>> ExternalSender::SplitCommi
     auto commitWelcomeBytes = ::mlspp::bytes_ns::bytes(commitWelcome);
     ::mlspp::tls::istream in(commitWelcomeBytes);
     ::mlspp::MLSMessage commitMessage;
-    ::mlspp::Welcome welcomeMessage;
     in >> commitMessage;
-    in >> welcomeMessage;
 
     ::mlspp::tls::ostream commitOut;
     commitOut << commitMessage;
     auto commitBytes = commitOut.bytes();
+
+    // a commit without any add proposals is not followed by a welcome
+    if (in.empty()) {
+        return std::make_pair(commitBytes, std::vector<uint8_t>{});
+    }
+
+    ::mlspp::Welcome welcomeMessage;
+    in >> welcomeMessage;
     ::mlspp::tls::ostream welcomeOut;
     welcomeOut << welcomeMessage;
     auto welcomeBytes = welcomeOut.bytes();

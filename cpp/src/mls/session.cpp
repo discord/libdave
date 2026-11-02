@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cstring>
+#include <iterator>
 #include <thread>
 #include <vector>
 
@@ -33,6 +34,11 @@ namespace mls {
 struct QueuedProposal {
     ::mlspp::ValidatedContent content;
     ::mlspp::bytes_ns::bytes ref;
+};
+
+struct OutboundCommit {
+    ::mlspp::MLSMessage message;
+    ::mlspp::State nextState;
 };
 
 std::unique_ptr<ISession> CreateSession(KeyPairContextType context,
@@ -257,9 +263,11 @@ try {
     auto outStream = ::mlspp::tls::ostream();
     outStream << commitMessage;
 
-    // cache the commit and resulting state in case we're the winning sender
-    outboundCommit_ = std::make_unique<::mlspp::MLSMessage>(std::move(commitMessage));
-    outboundCachedGroupState_ = std::make_unique<::mlspp::State>(std::move(newState));
+    // the voice gateway may select any commit we produced this epoch, not only the latest
+    if (outboundCommits_.size() >= kMaxRetainedOutboundCommits) {
+        outboundCommits_.pop_front();
+    }
+    outboundCommits_.push_back({std::move(commitMessage), std::move(newState)});
 
     // if there were any add proposals in this commit, then we also include the welcome message
     if (welcomeMessage.secrets.size() > 0) {
@@ -372,7 +380,11 @@ try {
 
     auto commitMessage = ::mlspp::tls::get<::mlspp::MLSMessage>(commit);
 
-    bool isOutboundCommit = outboundCommit_ && commitMessage == *outboundCommit_;
+    auto outboundCommit = std::find_if(
+      outboundCommits_.begin(), outboundCommits_.end(), [&commitMessage](const auto& outbound) {
+          return outbound.message == commitMessage;
+      });
+    bool isOutboundCommit = outboundCommit != outboundCommits_.end();
     if (!currentState_ && !isOutboundCommit) {
         throw std::invalid_argument("Unexpected commit before welcome");
     }
@@ -431,7 +443,12 @@ try {
     // must only supply it for the exact commit it was prepared for
     std::optional<::mlspp::State> cachedState;
     if (isOutboundCommit) {
-        cachedState = *outboundCachedGroupState_;
+        if (std::next(outboundCommit) != outboundCommits_.end()) {
+            DISCORD_LOG(LS_INFO) << "Commit matches an earlier one of the "
+                                 << outboundCommits_.size()
+                                 << " outbound commits retained for this epoch";
+        }
+        cachedState = outboundCommit->nextState;
     }
 
     auto newState = stateWithProposals_->handle(validatedMessage, cachedState);
@@ -888,8 +905,7 @@ void Session::ClearPendingState()
 
 void Session::ClearNextEpochState()
 {
-    outboundCommit_.reset();
-    outboundCachedGroupState_.reset();
+    outboundCommits_.clear();
 
     stateWithProposals_.reset();
     proposalQueue_.clear();
