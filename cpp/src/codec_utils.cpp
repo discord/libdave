@@ -148,12 +148,22 @@ bool ProcessFrameVp8(OutboundFrameProcessor& processor, ArrayView<const uint8_t>
     // if this is a delta frame the depacketizer only needs the first byte of the payload
     // header (since that's where the key frame flag is)
 
+    if (frame.size() == 0) {
+        REPORT_MALFORMED("VP8 frame is empty");
+        return false;
+    }
+
     size_t unencryptedHeaderBytes = 0;
     if ((frame.data()[0] & 0x01) == 0) {
         unencryptedHeaderBytes = kVP8KeyFrameUnencryptedBytes;
     }
     else {
         unencryptedHeaderBytes = kVP8DeltaFrameUnencryptedBytes;
+    }
+
+    if (frame.size() < unencryptedHeaderBytes) {
+        REPORT_MALFORMED("VP8 frame is too small to contain its payload header");
+        return false;
     }
 
     processor.AddUnencryptedBytes(frame.data(), unencryptedHeaderBytes);

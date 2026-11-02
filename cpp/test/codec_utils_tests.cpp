@@ -18,6 +18,49 @@ namespace test {
 
 class CodecUtilsTests : public DaveTests {};
 
+namespace {
+
+using ProcessFrameFn = bool (*)(OutboundFrameProcessor&, ArrayView<const uint8_t>);
+
+struct MalformedFrame {
+    std::string_view hex;
+    const char* assertMessage;
+};
+
+void ExpectRejectsFrames(ProcessFrameFn processFrame, std::initializer_list<MalformedFrame> frames)
+{
+    for (const auto& [hex, assertMessage] : frames) {
+        auto frame = GetBufferFromHex(hex);
+        OutboundFrameProcessor processor;
+        [[maybe_unused]] bool processed = true;
+        EXPECT_DEBUG_DEATH(processed = processFrame(
+                             processor, MakeArrayView<const uint8_t>(frame.data(), frame.size())),
+                           assertMessage)
+          << "frame: " << hex;
+#ifdef NDEBUG
+        EXPECT_FALSE(processed) << "frame: " << hex;
+#endif
+    }
+}
+
+void ExpectProcessesFrame(ProcessFrameFn processFrame,
+                          std::string_view hex,
+                          size_t unencryptedHeaderSize,
+                          std::string_view expectedEncryptedHex)
+{
+    auto frame = GetBufferFromHex(hex);
+    OutboundFrameProcessor processor;
+    EXPECT_TRUE(processFrame(processor, MakeArrayView<const uint8_t>(frame.data(), frame.size())));
+
+    auto& unencryptedRanges = processor.GetUnencryptedRanges();
+    ASSERT_EQ(unencryptedRanges.size(), 1u);
+    EXPECT_EQ(unencryptedRanges.front().offset, 0u);
+    EXPECT_EQ(unencryptedRanges.front().size, unencryptedHeaderSize);
+    EXPECT_EQ(processor.GetEncryptedBytes(), GetBufferFromHex(expectedEncryptedHex));
+}
+
+} // namespace
+
 TEST_F(CodecUtilsTests, RandomOpusFrame)
 {
     constexpr std::string_view randomBytes =
@@ -376,6 +419,37 @@ TEST_F(CodecUtilsTests, H265TwoIdrSlice)
     EXPECT_EQ(unencryptedRanges[0].size, 6u);
     EXPECT_EQ(unencryptedRanges[1].offset, 8u);
     EXPECT_EQ(unencryptedRanges[1].size, 6u);
+}
+
+TEST_F(CodecUtilsTests, Vp8RejectsShortFrames)
+{
+    ExpectRejectsFrames(codec_utils::ProcessFrameVp8,
+                        {
+                          {"", "VP8 frame is empty"},
+                          // key frames need a 10 byte payload header
+                          {"00", "too small to contain its payload header"},
+                          {"0000000000", "too small to contain its payload header"},
+                        });
+}
+
+TEST_F(CodecUtilsTests, Vp8ProcessesWellFormedFrames)
+{
+    ExpectProcessesFrame(codec_utils::ProcessFrameVp8, "50010203040506070809aabb", 10, "aabb");
+    ExpectProcessesFrame(codec_utils::ProcessFrameVp8, "51aabbcc", 1, "aabbcc");
+}
+
+TEST_F(CodecUtilsTests, MalformedFrameFallsBackToFullEncryption)
+{
+    auto frame = GetBufferFromHex("00aabb");
+
+    OutboundFrameProcessor processor;
+    EXPECT_DEBUG_DEATH(
+      processor.ProcessFrame(MakeArrayView<const uint8_t>(frame.data(), frame.size()), Codec::VP8),
+      "too small to contain its payload header");
+#ifdef NDEBUG
+    EXPECT_TRUE(processor.GetUnencryptedRanges().empty());
+    EXPECT_EQ(processor.GetEncryptedBytes(), frame);
+#endif
 }
 
 } // namespace test

@@ -189,6 +189,10 @@ else()
     # Whithout this the resulting file is called liblibdave.dylib
     set_target_properties(${LIB_NAME} PROPERTIES OUTPUT_NAME dave)
   endif()
+
+  if (TESTING AND MSVC)
+    target_sources(${LIB_NAME} PRIVATE ${PROJECT_SOURCE_DIR}/test/windows_crt_reporting.cpp)
+  endif()
 endif()
 
 if (TESTING)

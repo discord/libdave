@@ -6,6 +6,7 @@ SET(TEST_APP_NAME "libdave_test")
 
 file(GLOB_RECURSE TEST_HEADERS CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/*.h")
 file(GLOB_RECURSE TEST_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/*.cpp")
+list(FILTER TEST_SOURCES EXCLUDE REGEX ".*/windows_crt_reporting\\.cpp$")
 
 # The fuzz driver is part of the test build so the corpus regression test can
 # call its entry point (and so the driver itself can never rot uncompiled).

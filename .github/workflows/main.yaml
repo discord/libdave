@@ -58,9 +58,11 @@ jobs:
         run: make dev-sanitizers BUILD_DIR='${{ env.BUILD_DIR }}'
 
       - name: test
+        timeout-minutes: 10
         run: make dtest BUILD_DIR='${{ env.BUILD_DIR }}' BUILD_TYPE=Debug
 
       - name: test-capi
+        timeout-minutes: 10
         run: make dtest-capi BUILD_DIR='${{ env.BUILD_DIR }}' BUILD_TYPE=Debug
 
   release-build:
@@ -89,10 +91,12 @@ jobs:
         run: make all BUILD_DIR='${{ env.BUILD_DIR }}' BUILD_TYPE=Release
 
       - name: run tests
+        timeout-minutes: 10
         if: ${{ runner.os != 'Windows' }}
         run: make dtest BUILD_DIR='${{ env.BUILD_DIR }}' BUILD_TYPE=Release
 
       - name: run C api tests
+        timeout-minutes: 10
         run: make dtest-capi BUILD_DIR='${{ env.BUILD_DIR }}' BUILD_TYPE=Release
 
       - name: prepare artifacts (install)
