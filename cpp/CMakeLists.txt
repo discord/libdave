@@ -193,6 +193,11 @@ else()
   if (TESTING AND MSVC)
     target_sources(${LIB_NAME} PRIVATE ${PROJECT_SOURCE_DIR}/test/windows_crt_reporting.cpp)
   endif()
+
+  if (NOT BUILD_SHARED_LIBS)
+    target_compile_definitions(${LIB_NAME} PUBLIC DAVE_STATIC)
+    set_target_properties(${LIB_NAME} PROPERTIES CXX_VISIBILITY_PRESET hidden VISIBILITY_INLINES_HIDDEN ON)
+  endif()
 endif()
 
 if (TESTING)

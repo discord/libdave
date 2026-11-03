@@ -19,10 +19,14 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#if (defined(_WIN32) || defined(_WIN64))
+#if !defined(DAVE_EXPORT)
+#if defined(DAVE_STATIC)
+#define DAVE_EXPORT
+#elif (defined(_WIN32) || defined(_WIN64))
 #define DAVE_EXPORT __declspec(dllexport)
 #else
 #define DAVE_EXPORT __attribute__((visibility("default")))
+#endif
 #endif
 
 #define DAVE_DECLARE_OPAQUE_HANDLE(x) typedef struct x##_s* x
