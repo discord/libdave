@@ -72,41 +72,78 @@ LoggingSeverity GetLogSeverity()
     return gMinLogSeverity.load();
 }
 
-val ToOwnedTypedArray(const uint8_t* data, size_t size)
+EMSCRIPTEN_DECLARE_VAL_TYPE(ByteInput);
+EMSCRIPTEN_DECLARE_VAL_TYPE(ByteOutput);
+EMSCRIPTEN_DECLARE_VAL_TYPE(OptionalByteOutput);
+EMSCRIPTEN_DECLARE_VAL_TYPE(OptionalRoster);
+EMSCRIPTEN_DECLARE_VAL_TYPE(CommitResult);
+EMSCRIPTEN_DECLARE_VAL_TYPE(KeyRatchetInput);
+EMSCRIPTEN_DECLARE_VAL_TYPE(KeyRatchetOutput);
+
+// A JS exception unwinds the wasm stack without running destructors, so throw before allocating
+[[noreturn]] void ThrowTypeError(const char* message)
 {
-    val array = val::array();
-    for (size_t i = 0; i < size; i++) {
-        array.call<void>("push", data[i]);
+    val::global("TypeError").new_(val(message)).throw_();
+}
+
+std::vector<uint8_t> BytesFromJS(const val& value)
+{
+    auto arrayBuffer = val::global("ArrayBuffer");
+    val bytes = val::undefined();
+    if (arrayBuffer.call<bool>("isView", value)) {
+        bytes =
+          val::global("Uint8Array").new_(value["buffer"], value["byteOffset"], value["byteLength"]);
     }
-    return array;
+    else if (value.instanceof(arrayBuffer) || val::global("Array").call<bool>("isArray", value)) {
+        bytes = val::global("Uint8Array").new_(value);
+    }
+    else {
+        ThrowTypeError("expected an ArrayBuffer, ArrayBufferView or Array of bytes");
+    }
+    return convertJSArrayToNumberVector<uint8_t>(bytes);
 }
 
-val ToOwnedTypedArray(const ::mlspp::bytes_ns::bytes& data)
+// Copies out of the heap: a view's buffer would be the entire wasm memory
+ByteOutput ToOwnedArrayBuffer(const uint8_t* data, size_t size)
 {
-    return ToOwnedTypedArray(data.data(), data.size());
+    return ByteOutput(val::global("Uint8Array").new_(typed_memory_view(size, data))["buffer"]);
 }
 
-val ToOwnedTypedArray(const std::vector<uint8_t>& data)
+ByteOutput ToOwnedArrayBuffer(const ::mlspp::bytes_ns::bytes& data)
 {
-    return ToOwnedTypedArray(data.data(), data.size());
+    return ToOwnedArrayBuffer(data.data(), data.size());
 }
 
-val MlsKeyRatchetToJS(std::unique_ptr<MlsKeyRatchet> keyRatchet)
+ByteOutput ToOwnedArrayBuffer(const std::vector<uint8_t>& data)
+{
+    return ToOwnedArrayBuffer(data.data(), data.size());
+}
+
+val RosterToJS(const RosterMap& roster)
+{
+    val rosterObj = val::object();
+    for (const auto& [key, value] : roster) {
+        rosterObj.set(key, ToOwnedArrayBuffer(value));
+    }
+    return rosterObj;
+}
+
+KeyRatchetOutput MlsKeyRatchetToJS(std::unique_ptr<MlsKeyRatchet> keyRatchet)
 {
     if (!keyRatchet) {
-        return val::null();
+        return KeyRatchetOutput(val::null());
     }
 
     auto hashRatchet = keyRatchet->GetHashRatchet();
 
     auto value = val::object();
     value.set("cipherSuite", static_cast<uint16_t>(hashRatchet.suite.cipher_suite()));
-    value.set("baseSecret", ToOwnedTypedArray(hashRatchet.next_secret));
+    value.set("baseSecret", ToOwnedArrayBuffer(hashRatchet.next_secret));
 
-    return value;
+    return KeyRatchetOutput(value);
 }
 
-std::unique_ptr<MlsKeyRatchet> MlsKeyRatchetFromJS(val keyRatchet)
+std::unique_ptr<MlsKeyRatchet> MlsKeyRatchetFromJS(const val& keyRatchet)
 {
     if (keyRatchet.isNull()) {
         return nullptr;
@@ -114,10 +151,12 @@ std::unique_ptr<MlsKeyRatchet> MlsKeyRatchetFromJS(val keyRatchet)
 
     auto cipherSuite = ::mlspp::CipherSuite(
       static_cast<::mlspp::CipherSuite::ID>(keyRatchet["cipherSuite"].as<uint16_t>()));
-    auto baseSecret = emscripten::convertJSArrayToNumberVector<uint8_t>(keyRatchet["baseSecret"]);
-    auto baseSecretBytes = ::mlspp::bytes_ns::bytes(baseSecret);
+    auto baseSecret = BytesFromJS(keyRatchet["baseSecret"]);
+    if (baseSecret.empty()) {
+        ThrowTypeError("key ratchet baseSecret must not be empty");
+    }
 
-    return std::make_unique<MlsKeyRatchet>(cipherSuite, baseSecretBytes);
+    return std::make_unique<MlsKeyRatchet>(cipherSuite, ::mlspp::bytes_ns::bytes(baseSecret));
 }
 
 namespace mls {
@@ -166,17 +205,15 @@ public:
 
     ProtocolVersion GetProtocolVersion() { return session_->GetProtocolVersion(); }
 
-    val GetLastEpochAuthenticator()
+    ByteOutput GetLastEpochAuthenticator()
     {
-        return ToOwnedTypedArray(session_->GetLastEpochAuthenticator());
+        return ToOwnedArrayBuffer(session_->GetLastEpochAuthenticator());
     }
 
-    void SetExternalSender(val externalSender)
+    void SetExternalSender(ByteInput externalSender)
     {
         if (!externalSender.isNull()) {
-            std::vector<uint8_t> externalSenderVec =
-              emscripten::convertJSArrayToNumberVector<uint8_t>(externalSender);
-            session_->SetExternalSender(externalSenderVec);
+            session_->SetExternalSender(BytesFromJS(externalSender));
         }
         else {
             DISCORD_LOG(LS_ERROR) << "External sender is null";
@@ -187,22 +224,18 @@ public:
 
     void RemoveRecognizedUser(std::string userId) { session_->RemoveRecognizedUser(userId); }
 
-    val ProcessProposals(val proposals)
+    OptionalByteOutput ProcessProposals(ByteInput proposals)
     {
-        std::vector<uint8_t> proposalsVec =
-          emscripten::convertJSArrayToNumberVector<uint8_t>(proposals);
-
-        auto bytes = session_->ProcessProposals(proposalsVec);
+        auto bytes = session_->ProcessProposals(BytesFromJS(proposals));
         if (!bytes) {
-            return val::null();
+            return OptionalByteOutput(val::null());
         }
-        return ToOwnedTypedArray(*bytes);
+        return OptionalByteOutput(ToOwnedArrayBuffer(*bytes));
     }
 
-    val ProcessCommit(val commit)
+    CommitResult ProcessCommit(ByteInput commit)
     {
-        std::vector<uint8_t> commitVec = emscripten::convertJSArrayToNumberVector<uint8_t>(commit);
-        auto processedCommit = session_->ProcessCommit(commitVec);
+        auto processedCommit = session_->ProcessCommit(BytesFromJS(commit));
 
         auto failed = std::holds_alternative<dave::failed_t>(processedCommit);
         auto ignored = std::holds_alternative<dave::ignored_t>(processedCommit);
@@ -212,36 +245,25 @@ public:
         result.set("failed", failed);
         result.set("ignored", ignored);
 
-        val rosterObj = val::null();
-        if (rosterUpdate) {
-            rosterObj = val::object();
-            for (const auto& [key, value] : *rosterUpdate) {
-                rosterObj.set(key, ToOwnedTypedArray(value));
-            }
-        }
-        result.set("rosterUpdate", rosterObj);
-        return result;
+        result.set("rosterUpdate", rosterUpdate ? RosterToJS(*rosterUpdate) : val::null());
+        return CommitResult(result);
     }
 
-    val ProcessWelcome(val welcome)
+    OptionalRoster ProcessWelcome(ByteInput welcome)
     {
-        auto welcomeVec = emscripten::convertJSArrayToNumberVector<uint8_t>(welcome);
-        auto roster = session_->ProcessWelcome(welcomeVec);
+        auto roster = session_->ProcessWelcome(BytesFromJS(welcome));
         if (!roster) {
-            return val::null();
+            return OptionalRoster(val::null());
         }
-
-        val rosterObj = val::object();
-        for (const auto& [key, value] : *roster) {
-            rosterObj.set(key, ToOwnedTypedArray(value));
-        }
-
-        return rosterObj;
+        return OptionalRoster(RosterToJS(*roster));
     }
 
-    val GetMarshalledKeyPackage() { return ToOwnedTypedArray(session_->GetMarshalledKeyPackage()); }
+    ByteOutput GetMarshalledKeyPackage()
+    {
+        return ToOwnedArrayBuffer(session_->GetMarshalledKeyPackage());
+    }
 
-    val GetKeyRatchet(std::string const& userId)
+    KeyRatchetOutput GetKeyRatchet(std::string const& userId)
     {
         auto keyRatchet = session_->GetKeyRatchet(userId);
         auto mlsKeyRatchet =
@@ -259,7 +281,7 @@ class EncryptorWrapper {
 public:
     EncryptorWrapper() { encryptor_ = std::make_unique<Encryptor>(); }
 
-    void SetKeyRatchet(val keyRatchet)
+    void SetKeyRatchet(KeyRatchetInput keyRatchet)
     {
         encryptor_->SetKeyRatchet(MlsKeyRatchetFromJS(keyRatchet));
     }
@@ -321,7 +343,7 @@ class DecryptorWrapper {
 public:
     DecryptorWrapper() { decryptor_ = std::make_unique<Decryptor>(); }
 
-    void TransitionToKeyRatchet(val keyRatchet)
+    void TransitionToKeyRatchet(KeyRatchetInput keyRatchet)
     {
         decryptor_->TransitionToKeyRatchet(MlsKeyRatchetFromJS(keyRatchet));
     }
@@ -389,6 +411,17 @@ EMSCRIPTEN_BINDINGS(dave)
       .value("LS_WARNING", discord::dave::LS_WARNING)
       .value("LS_ERROR", discord::dave::LS_ERROR)
       .value("LS_NONE", discord::dave::LS_NONE);
+
+    register_type<discord::dave::ByteInput>("ArrayBuffer | ArrayBufferView | number[]");
+    register_type<discord::dave::ByteOutput>("ArrayBuffer");
+    register_type<discord::dave::OptionalByteOutput>("ArrayBuffer | null");
+    register_type<discord::dave::OptionalRoster>("Record<string, ArrayBuffer> | null");
+    register_type<discord::dave::CommitResult>(
+      "{ failed: boolean; ignored: boolean; rosterUpdate: Record<string, ArrayBuffer> | null }");
+    register_type<discord::dave::KeyRatchetInput>(
+      "{ cipherSuite: number; baseSecret: ArrayBuffer | ArrayBufferView | number[] } | null");
+    register_type<discord::dave::KeyRatchetOutput>(
+      "{ cipherSuite: number; baseSecret: ArrayBuffer } | null");
 
     function("MaxSupportedProtocolVersion", &discord::dave::MaxSupportedProtocolVersion);
     function("SetLogSeverity", &discord::dave::SetLogSeverity);

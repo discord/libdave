@@ -11,7 +11,7 @@ function convertAlgorithm(name) {
 
 Object.defineProperty(globalThis, 'crypto', {
   value: {
-    getRandomValues: (arr) => crypto.randomBytes(arr.length),
+    getRandomValues: (arr) => crypto.randomFillSync(arr),
     subtle: {
       digest: (algorithm, data) => {
         return crypto.hash(convertAlgorithm(algorithm), data, 'buffer').buffer;

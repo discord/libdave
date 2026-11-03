@@ -25,7 +25,8 @@
     "wasm/libdave.wasm"
   ],
   "scripts": {
-    "test": "jest",
+    "test": "jest --selectProjects unit",
+    "test:wasm": "node --experimental-vm-modules node_modules/jest/bin/jest.js --selectProjects wasm",
     "build:watch": "tsc --watch",
     "build": "tsc",
     "clean": "rm -rf dist",

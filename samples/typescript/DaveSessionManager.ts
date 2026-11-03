@@ -183,7 +183,7 @@ export class DaveSessionManager {
     this._setupKeyRatchetForUser(this.selfUserId, protocolVersion);
   }
 
-  private _makeUserKeyRatchet(userId: string, protocolVersion: number): any {
+  private _makeUserKeyRatchet(userId: string, protocolVersion: number): ReturnType<Session['GetKeyRatchet']> {
     if (protocolVersion === this.dave.kDisabledVersion) {
       return null;
     }

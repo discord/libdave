@@ -4,7 +4,9 @@ Contains the package @discordapp/libdave. This is leveraged by Discord clients t
 
 ### Testing
 
-Testing uses [Jest](https://jestjs.io/). You can run the tests with `pnpm jest`.
+Testing uses [Jest](https://jestjs.io/). You can run the tests with `pnpm test`.
+
+`pnpm test:wasm` runs the wasm binding tests in `__tests__/wasm`. They load `wasm/libdave.{js,wasm,d.ts}`, so build with `make wasm` in `cpp/` and copy those files into `wasm/` first.
 
 ### Dependencies
 
