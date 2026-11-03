@@ -78,7 +78,7 @@ private:
     TimePoint allowPassThroughUntil_{TimePoint::min()};
 
     TimePoint lastStatsTime_{TimePoint::min()};
-    std::array<DecryptorStats, 2> stats_;
+    std::array<DecryptorStats, 2> stats_{};
 };
 
 } // namespace dave

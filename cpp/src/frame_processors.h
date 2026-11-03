@@ -56,7 +56,7 @@ private:
     bool isEncrypted_{false};
     size_t originalSize_{0};
     ArrayView<const uint8_t> tag_;
-    TruncatedSyncNonce truncatedNonce_;
+    TruncatedSyncNonce truncatedNonce_{0};
     Ranges unencryptedRanges_;
     std::vector<uint8_t> authenticated_;
     std::vector<uint8_t> ciphertext_;

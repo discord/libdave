@@ -77,7 +77,7 @@ private:
 
     using TimePoint = std::chrono::time_point<std::chrono::steady_clock>;
     TimePoint lastStatsTime_{TimePoint::min()};
-    std::array<EncryptorStats, 2> stats_;
+    std::array<EncryptorStats, 2> stats_{};
 
     ProtocolVersionChangedCallback protocolVersionChangedCallback_;
     ProtocolVersion currentProtocolVersion_{MaxSupportedProtocolVersion()};

@@ -104,7 +104,7 @@ private:
 
     static constexpr std::string_view USER_MEDIA_KEY_BASE_LABEL = "Discord Secure Frames v0";
 
-    ProtocolVersion protocolVersion_;
+    ProtocolVersion protocolVersion_{kDisabledVersion};
     std::vector<uint8_t> groupId_;
     std::string signingKeyId_;
     std::string selfUserId_;

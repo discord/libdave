@@ -92,7 +92,7 @@ void Session::Reset() noexcept
 
     currentState_.reset();
 
-    protocolVersion_ = 0;
+    protocolVersion_ = kDisabledVersion;
     groupId_.clear();
 }
 
