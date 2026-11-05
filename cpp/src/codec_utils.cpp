@@ -1,5 +1,6 @@
 #include "codec_utils.h"
 
+#include <algorithm>
 #include <limits>
 #include <optional>
 
@@ -76,11 +77,15 @@ UnencryptedFrameHeaderSize BytesCoveringH264PPS(const uint8_t* payload,
 const uint8_t kH26XNaluLongStartCode[] = {0, 0, 0, 1};
 constexpr uint8_t kH26XNaluShortStartSequenceSize = 3;
 
-using IndexStartCodeSizePair = std::pair<size_t, size_t>;
+struct H26XStartCode {
+    size_t offset;
+    size_t nalUnitOffset;
+};
 
-std::optional<IndexStartCodeSizePair> FindNextH26XNaluIndex(const uint8_t* buffer,
-                                                            const size_t bufferSize,
-                                                            const size_t searchStartIndex = 0)
+// the returned start code begins at or after searchStartIndex
+std::optional<H26XStartCode> FindNextH26XStartCode(const uint8_t* buffer,
+                                                   const size_t bufferSize,
+                                                   const size_t searchStartIndex = 0)
 {
     constexpr uint8_t kH26XStartCodeHighestPossibleValue = 1;
     constexpr uint8_t kH26XStartCodeEndByteValue = 1;
@@ -101,15 +106,15 @@ std::optional<IndexStartCodeSizePair> FindNextH26XNaluIndex(const uint8_t* buffe
             if (buffer[i + 1] == kH26XStartCodeLeadingBytesValue &&
                 buffer[i] == kH26XStartCodeLeadingBytesValue) {
                 // confirmed start sequence {0, 0, 1}
-                auto nalUnitStartIndex = i + kH26XNaluShortStartSequenceSize;
+                auto nalUnitOffset = i + kH26XNaluShortStartSequenceSize;
 
-                if (i >= 1 && buffer[i - 1] == kH26XStartCodeLeadingBytesValue) {
+                if (i > searchStartIndex && buffer[i - 1] == kH26XStartCodeLeadingBytesValue) {
                     // 4 byte start code
-                    return std::optional<IndexStartCodeSizePair>({nalUnitStartIndex, 4});
+                    return H26XStartCode{i - 1, nalUnitOffset};
                 }
                 else {
                     // 3 byte start code
-                    return std::optional<IndexStartCodeSizePair>({nalUnitStartIndex, 3});
+                    return H26XStartCode{i, nalUnitOffset};
                 }
             }
 
@@ -122,6 +127,69 @@ std::optional<IndexStartCodeSizePair> FindNextH26XNaluIndex(const uint8_t* buffe
     }
 
     return std::nullopt;
+}
+
+bool ContainsH26XStartCode(const uint8_t* buffer, const size_t bufferSize)
+{
+    return FindNextH26XStartCode(buffer, bufferSize).has_value();
+}
+
+// splits an Annex B frame into NAL units, unencryptedPrefixSize returns how many bytes of each NAL
+// unit the packetizer needs in the clear, or nullopt if the NAL unit is malformed
+template <typename UnencryptedPrefixSizeFn>
+bool ProcessFrameH26X(OutboundFrameProcessor& processor,
+                      ArrayView<const uint8_t> frame,
+                      const size_t nalUnitHeaderSize,
+                      UnencryptedPrefixSizeFn unencryptedPrefixSize)
+{
+    // this frame can be packetized as a STAP-A or a FU-A
+    // so we need to look at the first NAL units to determine how many bytes
+    // the packetizer/depacketizer will need into the payload
+    if (frame.size() < kH26XNaluShortStartSequenceSize + nalUnitHeaderSize) {
+        REPORT_MALFORMED("H26X frame is too small to contain a NAL unit");
+        return false;
+    }
+
+    auto startCode = FindNextH26XStartCode(frame.data(), frame.size());
+    if (!startCode) {
+        REPORT_MALFORMED("H26X frame does not contain a NAL unit");
+        return false;
+    }
+
+    if (std::any_of(
+          frame.data(), frame.data() + startCode->offset, [](uint8_t byte) { return byte != 0; })) {
+        REPORT_MALFORMED("H26X frame does not start with an Annex B start code");
+        return false;
+    }
+
+    while (startCode) {
+        auto nalUnitOffset = startCode->nalUnitOffset;
+        auto nextStartCode = FindNextH26XStartCode(frame.data(), frame.size(), nalUnitOffset);
+        auto nalUnitSize = (nextStartCode ? nextStartCode->offset : frame.size()) - nalUnitOffset;
+
+        if (nalUnitSize < nalUnitHeaderSize) {
+            REPORT_MALFORMED("Malformed H26X frame: NAL unit header is truncated");
+            return false;
+        }
+
+        auto nalUnit = frame.data() + nalUnitOffset;
+        auto prefixSize = unencryptedPrefixSize(nalUnit, nalUnitSize);
+        if (!prefixSize) {
+            return false;
+        }
+
+        // Because WebRTC will convert them all start codes to 4-byte on the receiver side
+        // always write a long start code and then the NAL unit
+        processor.AddUnencryptedBytes(kH26XNaluLongStartCode, sizeof(kH26XNaluLongStartCode));
+        processor.AddUnencryptedBytes(nalUnit, *prefixSize);
+        if (*prefixSize < nalUnitSize) {
+            processor.AddEncryptedBytes(nalUnit + *prefixSize, nalUnitSize - *prefixSize);
+        }
+
+        startCode = nextStartCode;
+    }
+
+    return true;
 }
 
 bool ProcessFrameOpus(OutboundFrameProcessor& processor, ArrayView<const uint8_t> frame)
@@ -187,61 +255,35 @@ bool ProcessFrameH264(OutboundFrameProcessor& processor, ArrayView<const uint8_t
     // src/common_video/h264/h264_common.cc
     // src/modules/rtp_rtcp/source/video_rtp_depacketizer_h264.cc
 
-    // constexpr uint8_t kH264SBit = 0x80;
-    constexpr uint8_t kH264NalHeaderTypeMask = 0x1F;
-    constexpr uint8_t kH264NalTypeSlice = 1;
-    constexpr uint8_t kH264NalTypeIdr = 5;
-    constexpr uint8_t kH264NalUnitHeaderSize = 1;
+    static constexpr uint8_t kH264NalHeaderTypeMask = 0x1F;
+    static constexpr uint8_t kH264NalTypeSlice = 1;
+    static constexpr uint8_t kH264NalTypeIdr = 5;
+    static constexpr uint8_t kH264NalUnitHeaderSize = 1;
 
-    // this frame can be packetized as a STAP-A or a FU-A
-    // so we need to look at the first NAL units to determine how many bytes
-    // the packetizer/depacketizer will need into the payload
-    if (frame.size() < kH26XNaluShortStartSequenceSize + kH264NalUnitHeaderSize) {
-        REPORT_MALFORMED("H264 frame is too small to contain a NAL unit");
-        return false;
-    }
+    return ProcessFrameH26X(
+      processor,
+      frame,
+      kH264NalUnitHeaderSize,
+      [](const uint8_t* nalUnit, size_t nalUnitSize) -> std::optional<size_t> {
+          auto nalType = nalUnit[0] & kH264NalHeaderTypeMask;
+          if (nalType != kH264NalTypeSlice && nalType != kH264NalTypeIdr) {
+              return nalUnitSize;
+          }
 
-    auto naluIndexPair = FindNextH26XNaluIndex(frame.data(), frame.size());
-    while (naluIndexPair && naluIndexPair->first < frame.size() - 1) {
-        auto [nalUnitStartIndex, startCodeSize] = *naluIndexPair;
+          // once we've hit a slice or an IDR
+          // we just need to cover getting to the PPS ID
+          auto payloadSize = nalUnitSize - kH264NalUnitHeaderSize;
+          auto ppsBytes = BytesCoveringH264PPS(nalUnit + kH264NalUnitHeaderSize, payloadSize);
+          if (ppsBytes == 0) {
+              return std::nullopt;
+          }
+          if (ppsBytes > payloadSize) {
+              REPORT_MALFORMED("Malformed H264 frame: PPS ID overflows NAL unit");
+              return std::nullopt;
+          }
 
-        auto nalType = frame.data()[nalUnitStartIndex] & kH264NalHeaderTypeMask;
-
-        // copy the start code and then the NAL unit
-
-        // Because WebRTC will convert them all start codes to 4-byte on the receiver side
-        // always write a long start code and then the NAL unit
-        processor.AddUnencryptedBytes(kH26XNaluLongStartCode, sizeof(kH26XNaluLongStartCode));
-
-        auto nextNaluIndexPair =
-          FindNextH26XNaluIndex(frame.data(), frame.size(), nalUnitStartIndex);
-        auto nextNaluStart = nextNaluIndexPair.has_value()
-          ? nextNaluIndexPair->first - nextNaluIndexPair->second
-          : frame.size();
-
-        if (nalType == kH264NalTypeSlice || nalType == kH264NalTypeIdr) {
-            // once we've hit a slice or an IDR
-            // we just need to cover getting to the PPS ID
-            auto nalUnitPayloadStart = nalUnitStartIndex + kH264NalUnitHeaderSize;
-            auto nalUnitPPSBytes = BytesCoveringH264PPS(frame.data() + nalUnitPayloadStart,
-                                                        frame.size() - nalUnitPayloadStart);
-
-            processor.AddUnencryptedBytes(frame.data() + nalUnitStartIndex,
-                                          kH264NalUnitHeaderSize + nalUnitPPSBytes);
-            processor.AddEncryptedBytes(
-              frame.data() + nalUnitStartIndex + kH264NalUnitHeaderSize + nalUnitPPSBytes,
-              nextNaluStart - nalUnitStartIndex - kH264NalUnitHeaderSize - nalUnitPPSBytes);
-        }
-        else {
-            // copy the whole NAL unit
-            processor.AddUnencryptedBytes(frame.data() + nalUnitStartIndex,
-                                          nextNaluStart - nalUnitStartIndex);
-        }
-
-        naluIndexPair = nextNaluIndexPair;
-    }
-
-    return true;
+          return kH264NalUnitHeaderSize + ppsBytes;
+      });
 }
 
 bool ProcessFrameH265(OutboundFrameProcessor& processor, ArrayView<const uint8_t> frame)
@@ -251,53 +293,19 @@ bool ProcessFrameH265(OutboundFrameProcessor& processor, ArrayView<const uint8_t
     // src/common_video/h265/h265_common.cc
     // src/modules/rtp_rtcp/source/video_rtp_depacketizer_h265.cc
 
-    constexpr uint8_t kH265NalHeaderTypeMask = 0x7E;
-    constexpr uint8_t kH265NalTypeVclCutoff = 32;
-    constexpr uint8_t kH265NalUnitHeaderSize = 2;
+    static constexpr uint8_t kH265NalHeaderTypeMask = 0x7E;
+    static constexpr uint8_t kH265NalTypeVclCutoff = 32;
+    static constexpr uint8_t kH265NalUnitHeaderSize = 2;
 
-    // this frame can be packetized as a STAP-A or a FU-A
-    // so we need to look at the first NAL units to determine how many bytes
-    // the packetizer/depacketizer will need into the payload
-    if (frame.size() < kH26XNaluShortStartSequenceSize + kH265NalUnitHeaderSize) {
-        REPORT_MALFORMED("H265 frame is too small to contain a NAL unit");
-        return false;
-    }
-
-    // look for NAL unit 3 or 4 byte start code
-    auto naluIndexPair = FindNextH26XNaluIndex(frame.data(), frame.size());
-    while (naluIndexPair && naluIndexPair->first < frame.size() - 1) {
-        auto [nalUnitStartIndex, startCodeSize] = *naluIndexPair;
-
-        uint8_t nalType = (frame.data()[nalUnitStartIndex] & kH265NalHeaderTypeMask) >> 1;
-
-        // copy the start code and then the NAL unit
-
-        // Because WebRTC will convert them all start codes to 4-byte on the receiver side
-        // always write a long start code and then the NAL unit
-        processor.AddUnencryptedBytes(kH26XNaluLongStartCode, sizeof(kH26XNaluLongStartCode));
-
-        auto nextNaluIndexPair =
-          FindNextH26XNaluIndex(frame.data(), frame.size(), nalUnitStartIndex);
-        auto nextNaluStart = nextNaluIndexPair.has_value()
-          ? nextNaluIndexPair->first - nextNaluIndexPair->second
-          : frame.size();
-
-        if (nalType < kH265NalTypeVclCutoff) {
-            // found a VCL NAL, encrypt the payload only
-            processor.AddUnencryptedBytes(frame.data() + nalUnitStartIndex, kH265NalUnitHeaderSize);
-            processor.AddEncryptedBytes(frame.data() + nalUnitStartIndex + kH265NalUnitHeaderSize,
-                                        nextNaluStart - nalUnitStartIndex - kH265NalUnitHeaderSize);
-        }
-        else {
-            // copy the whole NAL unit
-            processor.AddUnencryptedBytes(frame.data() + nalUnitStartIndex,
-                                          nextNaluStart - nalUnitStartIndex);
-        }
-
-        naluIndexPair = nextNaluIndexPair;
-    }
-
-    return true;
+    return ProcessFrameH26X(
+      processor,
+      frame,
+      kH265NalUnitHeaderSize,
+      [](const uint8_t* nalUnit, size_t nalUnitSize) -> std::optional<size_t> {
+          uint8_t nalType = (nalUnit[0] & kH265NalHeaderTypeMask) >> 1;
+          // only VCL NAL unit payloads are encrypted
+          return nalType < kH265NalTypeVclCutoff ? kH265NalUnitHeaderSize : nalUnitSize;
+      });
 }
 
 bool ProcessFrameAv1(OutboundFrameProcessor& processor, ArrayView<const uint8_t> frame)
@@ -425,7 +433,7 @@ bool ValidateEncryptedFrame(OutboundFrameProcessor& processor, ArrayView<uint8_t
 
         auto start = encryptedSectionStart - std::min(encryptedSectionStart, size_t{Padding});
         auto end = std::min(range.offset + Padding, frame.size());
-        if (FindNextH26XNaluIndex(frame.data() + start, end - start)) {
+        if (ContainsH26XStartCode(frame.data() + start, end - start)) {
             return false;
         }
 
@@ -438,7 +446,7 @@ bool ValidateEncryptedFrame(OutboundFrameProcessor& processor, ArrayView<uint8_t
 
     auto start = encryptedSectionStart - std::min(encryptedSectionStart, size_t{Padding});
     auto end = frame.size();
-    if (FindNextH26XNaluIndex(frame.data() + start, end - start)) {
+    if (ContainsH26XStartCode(frame.data() + start, end - start)) {
         return false;
     }
 

@@ -59,6 +59,27 @@ void ExpectProcessesFrame(ProcessFrameFn processFrame,
     EXPECT_EQ(processor.GetEncryptedBytes(), GetBufferFromHex(expectedEncryptedHex));
 }
 
+// expectedFrameHex is the frame rebuilt from its unencrypted and encrypted bytes, which has
+// every start code rewritten as a 4 byte start code
+void ExpectPassesThroughFrame(Codec codec,
+                              std::string_view hex,
+                              std::string_view expectedFrameHex,
+                              std::string_view expectedEncryptedHex)
+{
+    auto frame = GetBufferFromHex(hex);
+    OutboundFrameProcessor processor;
+    processor.ProcessFrame(MakeArrayView<const uint8_t>(frame.data(), frame.size()), codec);
+    EXPECT_EQ(processor.GetEncryptedBytes(), GetBufferFromHex(expectedEncryptedHex))
+      << "frame: " << hex;
+
+    processor.GetCiphertextBytes() = processor.GetEncryptedBytes();
+    std::vector<uint8_t> reconstructed(processor.GetUnencryptedBytes().size() +
+                                       processor.GetEncryptedBytes().size());
+    reconstructed.resize(processor.ReconstructFrame(
+      MakeArrayView<uint8_t>(reconstructed.data(), reconstructed.size())));
+    EXPECT_EQ(reconstructed, GetBufferFromHex(expectedFrameHex)) << "frame: " << hex;
+}
+
 } // namespace
 
 TEST_F(CodecUtilsTests, RandomOpusFrame)
@@ -438,18 +459,172 @@ TEST_F(CodecUtilsTests, Vp8ProcessesWellFormedFrames)
     ExpectProcessesFrame(codec_utils::ProcessFrameVp8, "51aabbcc", 1, "aabbcc");
 }
 
+TEST_F(CodecUtilsTests, H264RejectsShortAndMalformedFrames)
+{
+    ExpectRejectsFrames(
+      codec_utils::ProcessFrameH264,
+      {
+        {"", "too small to contain a NAL unit"},
+        {"00", "too small to contain a NAL unit"},
+        {"0000", "too small to contain a NAL unit"},
+        // start code with no NAL unit header
+        {"00000001", "does not contain a NAL unit"},
+        // slice whose PPS ID runs past the end of the NAL unit
+        {"000000016100", "PPS ID overflows NAL unit"},
+        // PPS ID exp-golomb code is cut off by the next start code
+        {"0000000161680000000165b8", "PPS ID overflows NAL unit"},
+        {"000001050000000101", "PPS ID overflows NAL unit"},
+        // IDR NAL unit that is only its header byte
+        {"0000010500000101", "PPS ID overflows NAL unit"},
+        // PPS ID runs past the end of the frame
+        {"0000010510", "PPS ID overflows NAL unit"},
+        {"0000016100000000", "Unexpectedly large exponential golomb encoded value"},
+        {"ab0000000161e0fafa", "does not start with an Annex B start code"},
+        // length prefixed NAL units, the second length (261) reads as a start code
+        {"0000000309f0aa0000010561e0fafa", "does not start with an Annex B start code"},
+        // back to back start codes give a zero length non-VCL NAL unit
+        {"0000000109f000000100000161e0fafa", "NAL unit header is truncated"},
+      });
+}
+
+TEST_F(CodecUtilsTests, H264ProcessesWellFormedFrame)
+{
+    ExpectProcessesFrame(codec_utils::ProcessFrameH264, "0000000161e0fafafa", 6, "fafafa");
+}
+
+TEST_F(CodecUtilsTests, H264AcceptsLeadingZeroBytes)
+{
+    ExpectProcessesFrame(codec_utils::ProcessFrameH264, "00000000000161e0fafa", 6, "fafa");
+}
+
+TEST_F(CodecUtilsTests, H264KeepsTrailingOneByteNalUnit)
+{
+    // end of sequence NAL units are only their header byte
+    auto frame = GetBufferFromHex("0000000161e0fafa0000010a");
+    OutboundFrameProcessor processor;
+    EXPECT_TRUE(codec_utils::ProcessFrameH264(
+      processor, MakeArrayView<const uint8_t>(frame.data(), frame.size())));
+    EXPECT_EQ(processor.GetUnencryptedBytes(), GetBufferFromHex("0000000161e0000000010a"));
+    EXPECT_EQ(processor.GetEncryptedBytes(), GetBufferFromHex("fafa"));
+}
+
+TEST_F(CodecUtilsTests, H265RejectsShortAndMalformedFrames)
+{
+    ExpectRejectsFrames(
+      codec_utils::ProcessFrameH265,
+      {
+        {"", "too small to contain a NAL unit"},
+        {"00", "too small to contain a NAL unit"},
+        {"0000", "too small to contain a NAL unit"},
+        // start code followed by one byte of the two byte NAL unit header
+        {"0000000140", "NAL unit header is truncated"},
+        {"000000010201abab00000102", "NAL unit header is truncated"},
+        // VCL NAL unit cut to one byte by the next start code
+        {"00000001020000014001abab", "NAL unit header is truncated"},
+        {"0000010200000140", "NAL unit header is truncated"},
+        {"ab000000010201abab", "does not start with an Annex B start code"},
+        // length prefixed NAL units, the second length (261) reads as a start code
+        {"00000003460150000001050201abab", "does not start with an Annex B start code"},
+        // back to back start codes give a zero length NAL unit
+        {"000000014601500000010000010201abab", "NAL unit header is truncated"},
+        // non-VCL NAL unit cut to one byte by the next start code
+        {"0000000140010c01000001400000010201abab", "NAL unit header is truncated"},
+      });
+}
+
+TEST_F(CodecUtilsTests, H265ProcessesWellFormedFrame)
+{
+    ExpectProcessesFrame(codec_utils::ProcessFrameH265, "000000010201abab", 6, "abab");
+}
+
+TEST_F(CodecUtilsTests, H265AcceptsLeadingZeroBytes)
+{
+    ExpectProcessesFrame(codec_utils::ProcessFrameH265, "0000000000010201abab", 6, "abab");
+}
+
+TEST_F(CodecUtilsTests, H264PassesThroughEncoderFrameLayouts)
+{
+    // access unit delimiter and SEI ahead of an IDR slice
+    ExpectPassesThroughFrame(Codec::H264,
+                             "0000000109f0"
+                             "000000010605011a80"
+                             "0000000165b8fafa",
+                             "0000000109f0000000010605011a800000000165b8fafa",
+                             "fafa");
+    // filler data after a slice, as emitted by CBR hardware encoders
+    ExpectPassesThroughFrame(Codec::H264,
+                             "0000000161e0fafa"
+                             "000000010cffffff80",
+                             "0000000161e0fafa000000010cffffff80",
+                             "fafa");
+    // trailing zero bytes between NAL units and at the end of the frame
+    ExpectPassesThroughFrame(Codec::H264,
+                             "0000000161e0fafa00"
+                             "0000000161e0abab0000",
+                             "0000000161e0fafa000000000161e0abab0000",
+                             "fafa00abab0000");
+    // three byte start codes
+    ExpectPassesThroughFrame(Codec::H264,
+                             "00000109f0"
+                             "00000165b8fafa",
+                             "0000000109f00000000165b8fafa",
+                             "fafa");
+}
+
+TEST_F(CodecUtilsTests, H265PassesThroughEncoderFrameLayouts)
+{
+    // access unit delimiter, prefix SEI, IDR slice and suffix SEI
+    ExpectPassesThroughFrame(Codec::H265,
+                             "00000001460150"
+                             "000000014e0105011a80"
+                             "000000012601afafaf"
+                             "0000000150010401ab80",
+                             "00000001460150000000014e0105011a80000000012601afafaf"
+                             "0000000150010401ab80",
+                             "afafaf");
+    // filler data after a slice, as emitted by CBR hardware encoders
+    ExpectPassesThroughFrame(Codec::H265,
+                             "000000010201abab"
+                             "000000014c01ffffff80",
+                             "000000010201abab000000014c01ffffff80",
+                             "abab");
+    // trailing zero bytes between NAL units and at the end of the frame
+    ExpectPassesThroughFrame(Codec::H265,
+                             "000000010201abab00"
+                             "000000010201cdcd0000",
+                             "000000010201abab00000000010201cdcd0000",
+                             "abab00cdcd0000");
+    // nonzero temporal ID and three byte start codes
+    ExpectPassesThroughFrame(
+      Codec::H265, "00000146035000000102030abc", "000000014603500000000102030abc", "0abc");
+}
+
 TEST_F(CodecUtilsTests, MalformedFrameFallsBackToFullEncryption)
 {
-    auto frame = GetBufferFromHex("00aabb");
+    struct MalformedCodecFrame {
+        Codec codec;
+        std::string_view hex;
+        const char* assertMessage;
+    };
 
-    OutboundFrameProcessor processor;
-    EXPECT_DEBUG_DEATH(
-      processor.ProcessFrame(MakeArrayView<const uint8_t>(frame.data(), frame.size()), Codec::VP8),
-      "too small to contain its payload header");
+    for (const auto& [codec, hex, assertMessage] : {
+           MalformedCodecFrame{Codec::VP8, "00aabb", "too small to contain its payload header"},
+           MalformedCodecFrame{Codec::H264, "000000016100", "PPS ID overflows NAL unit"},
+           MalformedCodecFrame{
+             Codec::H265, "00000001020000014001abab", "NAL unit header is truncated"},
+         }) {
+        auto frame = GetBufferFromHex(hex);
+
+        OutboundFrameProcessor processor;
+        EXPECT_DEBUG_DEATH(
+          processor.ProcessFrame(MakeArrayView<const uint8_t>(frame.data(), frame.size()), codec),
+          assertMessage)
+          << "frame: " << hex;
 #ifdef NDEBUG
-    EXPECT_TRUE(processor.GetUnencryptedRanges().empty());
-    EXPECT_EQ(processor.GetEncryptedBytes(), frame);
+        EXPECT_TRUE(processor.GetUnencryptedRanges().empty()) << "frame: " << hex;
+        EXPECT_EQ(processor.GetEncryptedBytes(), frame) << "frame: " << hex;
 #endif
+    }
 }
 
 } // namespace test
