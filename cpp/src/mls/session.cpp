@@ -168,10 +168,7 @@ try {
         return std::nullopt;
     }
 
-    if (!stateWithProposals_) {
-        stateWithProposals_ = std::make_unique<::mlspp::State>(
-          pendingGroupState_ ? *pendingGroupState_ : *currentState_);
-    }
+    const auto& baseState = pendingGroupState_ ? *pendingGroupState_ : *currentState_;
 
     DISCORD_LOG(LS_INFO) << "Processing MLS proposals message of " << proposals.size() << " bytes";
 
@@ -184,62 +181,80 @@ try {
 
     DISCORD_LOG(LS_INFO) << "Revoking: " << isRevoke;
 
-    const auto suite = stateWithProposals_->cipher_suite();
+    const auto suite = baseState.cipher_suite();
+
+    // work on copies so that a refused batch leaves the queued state untouched
+    auto nextQueue = proposalQueue_;
+    std::unique_ptr<::mlspp::State> nextState;
 
     if (isRevoke) {
         std::vector<::mlspp::bytes_ns::bytes> refs;
         inStream >> refs;
 
-        for (const auto& ref : refs) {
-            bool found = false;
-            for (auto it = proposalQueue_.begin(); it != proposalQueue_.end(); it++) {
-                if (it->ref == ref) {
-                    found = true;
-                    proposalQueue_.erase(it);
-                    break;
-                }
-            }
+        nextState = std::make_unique<::mlspp::State>(baseState);
 
-            if (!found) {
-                DISCORD_LOG(LS_ERROR) << "Cannot revoke unrecognized proposal ref";
-                TRACK_MLS_ERROR("Unrecognized proposal revocation");
-                return std::nullopt;
+        size_t revokedCount = 0;
+        for (auto it = nextQueue.begin(); it != nextQueue.end();) {
+            if (std::find(refs.begin(), refs.end(), it->ref) != refs.end()) {
+                ++revokedCount;
+                it = nextQueue.erase(it);
+            }
+            else {
+                // success will queue the proposal, failure will throw
+                nextState->handle(it->content);
+                ++it;
             }
         }
 
-        stateWithProposals_ = std::make_unique<::mlspp::State>(
-          pendingGroupState_ ? *pendingGroupState_ : *currentState_);
-
-        for (auto& prop : proposalQueue_) {
-            // success will queue the proposal, failure will throw
-            stateWithProposals_->handle(prop.content);
+        // queued refs are unique, so a short count means a revoked ref is unknown or repeated
+        if (revokedCount != refs.size()) {
+            DISCORD_LOG(LS_ERROR) << "Cannot revoke unrecognized or repeated proposal ref";
+            TRACK_MLS_ERROR("Unrecognized proposal revocation");
+            return std::nullopt;
         }
     }
     else {
         std::vector<::mlspp::MLSMessage> messages;
         inStream >> messages;
 
-        for (const auto& proposalMessage : messages) {
-            auto validatedMessage = stateWithProposals_->unwrap(proposalMessage);
+        nextState =
+          std::make_unique<::mlspp::State>(stateWithProposals_ ? *stateWithProposals_ : baseState);
 
-            if (!ValidateProposalMessage(validatedMessage.authenticated_content(),
-                                         *stateWithProposals_)) {
+        for (const auto& proposalMessage : messages) {
+            auto validatedMessage = nextState->unwrap(proposalMessage);
+            auto ref = suite.ref(validatedMessage.authenticated_content());
+
+            // mlspp ignores a ref it has already cached, so the queue must not hold one twice
+            if (std::any_of(nextQueue.begin(), nextQueue.end(), [&](const QueuedProposal& queued) {
+                    return queued.ref == ref;
+                })) {
+                DISCORD_LOG(LS_ERROR) << "Duplicate MLS proposal ref";
+                TRACK_MLS_ERROR("Duplicate proposal ref");
+                return std::nullopt;
+            }
+
+            if (!ValidateProposalMessage(validatedMessage.authenticated_content(), *nextState)) {
                 return std::nullopt;
             }
 
             // success will queue the proposal, failure will throw
-            stateWithProposals_->handle(validatedMessage);
+            nextState->handle(validatedMessage);
 
-            auto ref = suite.ref(validatedMessage.authenticated_content());
-
-            proposalQueue_.push_back({
+            nextQueue.push_back({
               std::move(validatedMessage),
               std::move(ref),
             });
         }
     }
 
-    if (!ValidateQueuedProposals()) {
+    if (!ValidateQueuedProposals(nextQueue, *nextState)) {
+        return std::nullopt;
+    }
+
+    if (nextQueue.empty()) {
+        DISCORD_LOG(LS_INFO) << "No queued MLS proposals to commit";
+        stateWithProposals_ = std::move(nextState);
+        proposalQueue_ = std::move(nextQueue);
         return std::nullopt;
     }
 
@@ -254,7 +269,7 @@ try {
     };
 
     auto [commitMessage, welcomeMessage, newState] =
-      stateWithProposals_->commit(commitSecret, commitOpts, {});
+      nextState->commit(commitSecret, commitOpts, {});
 
     DISCORD_LOG(LS_INFO)
       << "Prepared commit/welcome/next state for MLS group from received proposals";
@@ -263,16 +278,19 @@ try {
     auto outStream = ::mlspp::tls::ostream();
     outStream << commitMessage;
 
+    // if there were any add proposals in this commit, then we also include the welcome message
+    if (welcomeMessage.secrets.size() > 0) {
+        outStream << welcomeMessage;
+    }
+
+    stateWithProposals_ = std::move(nextState);
+    proposalQueue_ = std::move(nextQueue);
+
     // the voice gateway may select any commit we produced this epoch, not only the latest
     if (outboundCommits_.size() >= kMaxRetainedOutboundCommits) {
         outboundCommits_.pop_front();
     }
     outboundCommits_.push_back({std::move(commitMessage), std::move(newState)});
-
-    // if there were any add proposals in this commit, then we also include the welcome message
-    if (welcomeMessage.secrets.size() > 0) {
-        outStream << welcomeMessage;
-    }
 
     DISCORD_LOG(LS_VERBOSE) << "Output: " << ::mlspp::bytes_ns::bytes(outStream.bytes());
 
@@ -352,13 +370,12 @@ bool Session::ValidateProposalMessage(::mlspp::AuthenticatedContent const& messa
     return true;
 }
 
-bool Session::ValidateQueuedProposals() const
+bool Session::ValidateQueuedProposals(std::list<QueuedProposal> const& queue,
+                                      ::mlspp::State const& targetState) const
 {
-    return std::all_of(
-      proposalQueue_.begin(), proposalQueue_.end(), [&](const QueuedProposal& queued) {
-          return ValidateProposalMessage(queued.content.authenticated_content(),
-                                         *stateWithProposals_);
-      });
+    return std::all_of(queue.begin(), queue.end(), [&](const QueuedProposal& queued) {
+        return ValidateProposalMessage(queued.content.authenticated_content(), targetState);
+    });
 }
 
 RosterVariant Session::ProcessCommit(std::vector<uint8_t> commit) noexcept
@@ -425,17 +442,26 @@ try {
           ::mlspp::tls::var::get<::mlspp::ProposalRef>(proposalOrRef.content));
     }
 
-    auto isCommitted = [&committedRefs](const QueuedProposal& queued) {
-        return std::find(committedRefs.begin(), committedRefs.end(), queued.ref) !=
-          committedRefs.end();
-    };
-    if (committedRefs.size() != proposalQueue_.size() ||
-        !std::all_of(proposalQueue_.begin(), proposalQueue_.end(), isCommitted)) {
+    const std::set<::mlspp::ProposalRef> committedRefSet(committedRefs.begin(),
+                                                         committedRefs.end());
+    if (committedRefSet.size() != committedRefs.size()) {
+        throw std::invalid_argument("Commit references a proposal more than once");
+    }
+
+    std::set<::mlspp::ProposalRef> queuedRefSet;
+    for (const auto& queued : proposalQueue_) {
+        queuedRefSet.insert(queued.ref);
+    }
+    if (queuedRefSet.size() != proposalQueue_.size()) {
+        throw std::invalid_argument("Queued proposals contain a duplicate ref");
+    }
+
+    if (committedRefSet != queuedRefSet) {
         throw std::invalid_argument("Commit does not cover queued proposals");
     }
 
     // with coverage checked, the queued proposals are exactly what this commit applies
-    if (!ValidateQueuedProposals()) {
+    if (!ValidateQueuedProposals(proposalQueue_, *stateWithProposals_)) {
         throw std::invalid_argument("Commit includes invalid queued proposal");
     }
 

@@ -94,7 +94,8 @@ private:
     bool IsRecognizedUserID(const ::mlspp::Credential& cred) const;
     bool ValidateProposalMessage(::mlspp::AuthenticatedContent const& message,
                                  ::mlspp::State const& targetState) const;
-    bool ValidateQueuedProposals() const;
+    bool ValidateQueuedProposals(std::list<QueuedProposal> const& queue,
+                                 ::mlspp::State const& targetState) const;
     bool VerifyWelcomeState(::mlspp::State const& state) const;
 
     RosterMap ReplaceState(std::unique_ptr<::mlspp::State>&& state);

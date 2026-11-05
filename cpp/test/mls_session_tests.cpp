@@ -1,10 +1,13 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <condition_variable>
 #include <initializer_list>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <optional>
+#include <set>
 #include <string>
 #include <utility>
 #include <variant>
@@ -35,6 +38,8 @@ const std::string kUserA = "1234123412341234";
 const std::string kUserB = "5678567856785678";
 const std::string kUserC = "9012901290129012";
 const std::string kUserD = "3456345634563456";
+const std::string kUserE = "7890789078907890";
+const std::string kUserF = "2345234523452345";
 
 // Wraps a session with a failure-callback recorder so tests can assert on the
 // precise error reported through the MLSFailureCallback.
@@ -143,6 +148,50 @@ std::vector<uint8_t> ProposeAddFor(ExternalSender& externalSender,
                                    TestSession& joiner)
 {
     return externalSender.ProposeAdd(epoch, joiner.session->GetMarshalledKeyPackage());
+}
+
+// Joins the messages of several proposal batches into a single batch.
+std::vector<uint8_t> CombineProposals(std::initializer_list<std::vector<uint8_t>> batches)
+{
+    std::vector<::mlspp::MLSMessage> messages;
+    for (const auto& batch : batches) {
+        auto parsed = ExternalSender::ParseProposals(batch);
+        messages.insert(messages.end(), parsed.begin(), parsed.end());
+    }
+
+    bool isRevoke = false;
+    ::mlspp::tls::ostream out;
+    out << isRevoke;
+    out << messages;
+    return out.bytes();
+}
+
+void ExpectAdded(RosterVariant const& commitResult, std::set<std::string> const& userIds)
+{
+    auto* roster = std::get_if<RosterMap>(&commitResult);
+    ASSERT_NE(roster, nullptr);
+    EXPECT_EQ(roster->size(), userIds.size());
+    for (const auto& userId : userIds) {
+        EXPECT_EQ(roster->count(std::stoull(userId)), 1u) << userId;
+    }
+}
+
+bool IsInRoster(TestSession& session, std::string const& userId)
+{
+    struct Result {
+        std::mutex mutex;
+        std::condition_variable done;
+        std::optional<bool> found;
+    };
+    auto result = std::make_shared<Result>();
+    session.session->GetPairwiseFingerprint(0, userId, [result](std::vector<uint8_t> const& value) {
+        std::lock_guard<std::mutex> lock(result->mutex);
+        result->found = !value.empty();
+        result->done.notify_one();
+    });
+    std::unique_lock<std::mutex> lock(result->mutex);
+    result->done.wait(lock, [&] { return result->found.has_value(); });
+    return *result->found;
 }
 
 // An MLS member driven directly through mlspp, for commits a Session would never produce.
@@ -417,34 +466,33 @@ TEST_F(MlsSessionTests, SessionRetainsBoundedOutboundCommits)
     a.Recognize({kUserC});
     b.Recognize({kUserC});
 
-    // alternately proposing and revoking the same add makes a prepare a distinct commit each time
+    // an empty append makes a prepare a distinct commit of the same queued add each time
     auto proposeAddC = externalSender.ProposeAdd(1, c.session->GetMarshalledKeyPackage());
-    auto revokeAddC = externalSender.Revoke(proposeAddC);
 
-    // two more commits than the cap, ending on a revocation so nothing is left queued
+    // two more commits than the cap, all covering a's queue
     std::vector<std::vector<uint8_t>> commits;
     while (commits.size() < mls::Session::kMaxRetainedOutboundCommits + 2) {
-        auto const& proposals = commits.size() % 2 == 0 ? proposeAddC : revokeAddC;
+        auto const& proposals = commits.empty() ? proposeAddC : CombineProposals({});
         auto commit = PrepareCommit(externalSender, a, proposals);
         ASSERT_TRUE(commit.has_value());
         commits.push_back(std::move(*commit));
     }
 
-    // the empty commits following each revocation cover a's queue; the first was evicted
+    // the first two were evicted
     EXPECT_TRUE(std::holds_alternative<failed_t>(a.session->ProcessCommit(commits[1])));
     EXPECT_TRUE(a.HasFailureReason("Handle own commits with caching"));
 
     ASSERT_TRUE(b.session->ProcessProposals(proposeAddC).has_value());
-    ASSERT_TRUE(b.session->ProcessProposals(revokeAddC).has_value());
-    auto commitResultB = b.session->ProcessCommit(commits[3]);
+    auto commitResultB = b.session->ProcessCommit(commits[2]);
     auto* rosterChangeB = std::get_if<RosterMap>(&commitResultB);
     ASSERT_NE(rosterChangeB, nullptr);
-    EXPECT_TRUE(rosterChangeB->empty());
+    EXPECT_EQ(rosterChangeB->size(), 1u);
+    EXPECT_EQ(rosterChangeB->count(std::stoull(kUserC)), 1u);
 
-    auto commitResultA = a.session->ProcessCommit(commits[3]);
+    auto commitResultA = a.session->ProcessCommit(commits[2]);
     auto* rosterChangeA = std::get_if<RosterMap>(&commitResultA);
     ASSERT_NE(rosterChangeA, nullptr);
-    EXPECT_TRUE(rosterChangeA->empty());
+    EXPECT_EQ(*rosterChangeA, *rosterChangeB);
 
     auto authenticatorA = a.session->GetLastEpochAuthenticator();
     ASSERT_FALSE(authenticatorA.empty());
@@ -627,12 +675,13 @@ TEST_F(MlsSessionTests, SessionProposalsDoNotCommitStaleQueuedAdd)
 
     // c disconnects before an unrelated add arrives
     a.Forget(kUserC);
-    auto commitWelcome = a.session->ProcessProposals(ProposeAddFor(externalSender, 0, b));
-    EXPECT_FALSE(commitWelcome.has_value());
+    auto proposalB = ProposeAddFor(externalSender, 0, b);
+    EXPECT_FALSE(a.session->ProcessProposals(proposalB).has_value());
     EXPECT_TRUE(a.HasFailureReason("Unexpected user ID in add proposal"));
 
-    // once the voice gateway revokes c's add, a commits the remaining add of b
-    commitWelcome = a.session->ProcessProposals(externalSender.Revoke(proposalC));
+    // once the voice gateway revokes c's add, b's add can be queued and committed
+    EXPECT_FALSE(a.session->ProcessProposals(externalSender.Revoke(proposalC)).has_value());
+    auto commitWelcome = a.session->ProcessProposals(proposalB);
     ASSERT_TRUE(commitWelcome.has_value());
     auto commit = externalSender.SplitCommitWelcome(*commitWelcome).first;
     auto commitResult = a.session->ProcessCommit(commit);
@@ -662,6 +711,318 @@ TEST_F(MlsSessionTests, SessionRevokeDoesNotCommitStaleQueuedAdd)
     auto commitWelcome = a.session->ProcessProposals(externalSender.Revoke(proposalB));
     EXPECT_FALSE(commitWelcome.has_value());
     EXPECT_TRUE(a.HasFailureReason("Unexpected user ID in add proposal"));
+}
+
+TEST_F(MlsSessionTests, SessionRequeuedProposalIsRemovedBySingleRevoke)
+{
+    ExternalSender externalSender(kTestProtocolVersion, kTestGroupId);
+    TestSession a(kUserA);
+    TestSession b(kUserB);
+    TestSession c(kUserC);
+    a.InitAndSetExternalSender(externalSender, kTestGroupId);
+    b.InitAndSetExternalSender(externalSender, kTestGroupId);
+    c.InitAndSetExternalSender(externalSender, kTestGroupId);
+
+    a.Recognize({kUserB, kUserC});
+    auto proposalC = ProposeAddFor(externalSender, 0, c);
+    ASSERT_TRUE(a.session->ProcessProposals(ProposeAddFor(externalSender, 0, b)).has_value());
+    ASSERT_TRUE(a.session->ProcessProposals(proposalC).has_value());
+    EXPECT_FALSE(a.session->ProcessProposals(proposalC).has_value());
+    EXPECT_TRUE(a.HasFailureReason("Duplicate proposal ref"));
+
+    auto commitWelcome = a.session->ProcessProposals(externalSender.Revoke(proposalC));
+    ASSERT_TRUE(commitWelcome.has_value());
+    auto commit = externalSender.SplitCommitWelcome(*commitWelcome).first;
+    auto commitResult = a.session->ProcessCommit(commit);
+    auto* roster = std::get_if<RosterMap>(&commitResult);
+    ASSERT_NE(roster, nullptr);
+    EXPECT_EQ(roster->size(), 2u);
+    EXPECT_EQ(roster->count(std::stoull(kUserB)), 1u);
+    EXPECT_EQ(roster->count(std::stoull(kUserC)), 0u);
+}
+
+TEST_F(MlsSessionTests, SessionFailedProposalBatchIsNotQueued)
+{
+    ExternalSender externalSender(kTestProtocolVersion, kTestGroupId);
+    TestSession a(kUserA);
+    TestSession b(kUserB);
+    TestSession c(kUserC);
+    TestSession d(kUserD);
+    a.InitAndSetExternalSender(externalSender, kTestGroupId);
+    b.InitAndSetExternalSender(externalSender, kTestGroupId);
+    c.InitAndSetExternalSender(externalSender, kTestGroupId);
+    d.InitAndSetExternalSender(externalSender, kTestGroupId);
+
+    // the add of c fails after the add of b has been handled
+    a.Recognize({kUserB, kUserD});
+    auto batch =
+      CombineProposals({ProposeAddFor(externalSender, 0, b), ProposeAddFor(externalSender, 0, c)});
+    EXPECT_FALSE(a.session->ProcessProposals(batch).has_value());
+    EXPECT_TRUE(a.HasFailureReason("Unexpected user ID in add proposal"));
+
+    auto commitWelcome = a.session->ProcessProposals(ProposeAddFor(externalSender, 0, d));
+    ASSERT_TRUE(commitWelcome.has_value());
+    auto commit = externalSender.SplitCommitWelcome(*commitWelcome).first;
+    auto commitResult = a.session->ProcessCommit(commit);
+    auto* roster = std::get_if<RosterMap>(&commitResult);
+    ASSERT_NE(roster, nullptr);
+    EXPECT_EQ(roster->size(), 2u);
+    EXPECT_EQ(roster->count(std::stoull(kUserB)), 0u);
+    EXPECT_EQ(roster->count(std::stoull(kUserD)), 1u);
+}
+
+TEST_F(MlsSessionTests, SessionFailedAppendLeavesProposalStateUntouched)
+{
+    for (bool selectEarlierCommit : {true, false}) {
+        SCOPED_TRACE(selectEarlierCommit ? "earlier commit" : "following add");
+        ExternalSender externalSender(kTestProtocolVersion, kTestGroupId);
+        TestSession a(kUserA);
+        TestSession b(kUserB);
+        TestSession c(kUserC);
+        TestSession d(kUserD);
+        TestSession e(kUserE);
+        TestSession f(kUserF);
+        for (auto* session : {&a, &b, &c, &d, &e, &f}) {
+            session->InitAndSetExternalSender(externalSender, kTestGroupId);
+        }
+        ASSERT_TRUE(EstablishGroup(externalSender, a, b));
+        a.Recognize({kUserC, kUserD, kUserE});
+
+        auto earlierCommit = PrepareCommit(externalSender, a, ProposeAddFor(externalSender, 1, d));
+        ASSERT_TRUE(earlierCommit.has_value());
+
+        auto batch = CombineProposals(
+          {ProposeAddFor(externalSender, 1, e), ProposeAddFor(externalSender, 1, f)});
+        EXPECT_FALSE(a.session->ProcessProposals(batch).has_value());
+        EXPECT_TRUE(a.HasFailureReason("Unexpected user ID in add proposal"));
+
+        if (selectEarlierCommit) {
+            ExpectAdded(a.session->ProcessCommit(*earlierCommit), {kUserD});
+        }
+        else {
+            auto commit = PrepareCommit(externalSender, a, ProposeAddFor(externalSender, 1, c));
+            ASSERT_TRUE(commit.has_value());
+            ExpectAdded(a.session->ProcessCommit(*commit), {kUserC, kUserD});
+        }
+    }
+}
+
+TEST_F(MlsSessionTests, SessionRevokeOfUnknownRefIsRefused)
+{
+    ExternalSender externalSender(kTestProtocolVersion, kTestGroupId);
+    TestSession a(kUserA);
+    TestSession b(kUserB);
+    TestSession d(kUserD);
+    TestSession f(kUserF);
+    for (auto* session : {&a, &b, &d, &f}) {
+        session->InitAndSetExternalSender(externalSender, kTestGroupId);
+    }
+    ASSERT_TRUE(EstablishGroup(externalSender, a, b));
+    a.Recognize({kUserD, kUserF});
+
+    auto proposeAddD = ProposeAddFor(externalSender, 1, d);
+    ASSERT_TRUE(a.session->ProcessProposals(proposeAddD).has_value());
+
+    for (const auto& revoked :
+         {CombineProposals({proposeAddD, ProposeAddFor(externalSender, 1, f)}),
+          CombineProposals({proposeAddD, proposeAddD})}) {
+        auto failureCount = a.failureReasons.size();
+        EXPECT_FALSE(a.session->ProcessProposals(externalSender.Revoke(revoked)).has_value());
+        ASSERT_EQ(a.failureReasons.size(), failureCount + 1);
+        EXPECT_EQ(a.failureReasons.back(), "Unrecognized proposal revocation");
+    }
+
+    auto commit = PrepareCommit(externalSender, a, CombineProposals({}));
+    ASSERT_TRUE(commit.has_value());
+    ExpectAdded(a.session->ProcessCommit(*commit), {kUserD});
+}
+
+TEST_F(MlsSessionTests, SessionEmptyQueueDoesNotCommit)
+{
+    ExternalSender externalSender(kTestProtocolVersion, kTestGroupId);
+    TestSession a(kUserA);
+    TestSession b(kUserB);
+    TestSession c(kUserC);
+    for (auto* session : {&a, &b, &c}) {
+        session->InitAndSetExternalSender(externalSender, kTestGroupId);
+    }
+    ASSERT_TRUE(EstablishGroup(externalSender, a, b));
+    a.Recognize({kUserC});
+
+    auto proposeAddC = ProposeAddFor(externalSender, 1, c);
+    auto retainedCommit = PrepareCommit(externalSender, a, proposeAddC);
+    ASSERT_TRUE(retainedCommit.has_value());
+
+    auto failureCount = a.failureReasons.size();
+    EXPECT_FALSE(a.session->ProcessProposals(externalSender.Revoke(proposeAddC)).has_value());
+    EXPECT_FALSE(a.session->ProcessProposals(CombineProposals({})).has_value());
+    EXPECT_EQ(a.failureReasons.size(), failureCount);
+
+    EXPECT_TRUE(std::holds_alternative<failed_t>(a.session->ProcessCommit(*retainedCommit)));
+    EXPECT_TRUE(a.HasFailureReason("Commit does not cover queued proposals"));
+
+    auto commit = PrepareCommit(externalSender, a, proposeAddC);
+    ASSERT_TRUE(commit.has_value());
+    ExpectAdded(a.session->ProcessCommit(*commit), {kUserC});
+}
+
+TEST_F(MlsSessionTests, SessionDuplicateAddIsRefused)
+{
+    ExternalSender externalSender(kTestProtocolVersion, kTestGroupId);
+    TestSession a(kUserA);
+    TestSession b(kUserB);
+    TestSession c(kUserC);
+    TestSession d(kUserD);
+    TestSession e(kUserE);
+    for (auto* session : {&a, &b, &c, &d, &e}) {
+        session->InitAndSetExternalSender(externalSender, kTestGroupId);
+    }
+    ASSERT_TRUE(EstablishGroup(externalSender, a, b));
+    a.Recognize({kUserC, kUserD, kUserE});
+
+    auto proposeAddC = ProposeAddFor(externalSender, 1, c);
+    ASSERT_TRUE(a.session->ProcessProposals(proposeAddC).has_value());
+
+    auto proposeAddD = ProposeAddFor(externalSender, 1, d);
+    auto proposeAddE = ProposeAddFor(externalSender, 1, e);
+    for (const auto& batch : {proposeAddC,
+                              CombineProposals({proposeAddD, proposeAddC}),
+                              CombineProposals({proposeAddD, proposeAddE, proposeAddD})}) {
+        EXPECT_FALSE(a.session->ProcessProposals(batch).has_value());
+    }
+    EXPECT_TRUE(a.HasFailureReason("Duplicate proposal ref"));
+
+    auto commit = PrepareCommit(externalSender, a, CombineProposals({}));
+    ASSERT_TRUE(commit.has_value());
+    ExpectAdded(a.session->ProcessCommit(*commit), {kUserC});
+}
+
+TEST_F(MlsSessionTests, SessionAppendWithStaleQueuedAddIsRefused)
+{
+    ExternalSender externalSender(kTestProtocolVersion, kTestGroupId);
+    TestSession a(kUserA);
+    TestSession b(kUserB);
+    TestSession x(kUserC);
+    TestSession y(kUserD);
+    for (auto* session : {&a, &b, &x, &y}) {
+        session->InitAndSetExternalSender(externalSender, kTestGroupId);
+    }
+    ASSERT_TRUE(EstablishGroup(externalSender, a, b));
+    a.Recognize({x.userId, y.userId});
+
+    auto proposeAddX = ProposeAddFor(externalSender, 1, x);
+    ASSERT_TRUE(a.session->ProcessProposals(proposeAddX).has_value());
+    a.Forget(x.userId);
+
+    auto proposeAddY = ProposeAddFor(externalSender, 1, y);
+    EXPECT_FALSE(a.session->ProcessProposals(proposeAddY).has_value());
+    EXPECT_TRUE(a.HasFailureReason("Unexpected user ID in add proposal"));
+
+    EXPECT_FALSE(a.session->ProcessProposals(externalSender.Revoke(proposeAddX)).has_value());
+    auto commit = PrepareCommit(externalSender, a, proposeAddY);
+    ASSERT_TRUE(commit.has_value());
+    ExpectAdded(a.session->ProcessCommit(*commit), {y.userId});
+}
+
+TEST_F(MlsSessionTests, SessionEmptyAppendRecommitsQueuedProposals)
+{
+    ExternalSender externalSender(kTestProtocolVersion, kTestGroupId);
+    TestSession a(kUserA);
+    TestSession b(kUserB);
+    TestSession c(kUserC);
+    TestSession d(kUserD);
+    for (auto* session : {&a, &b, &c, &d}) {
+        session->InitAndSetExternalSender(externalSender, kTestGroupId);
+    }
+    ASSERT_TRUE(EstablishGroup(externalSender, a, b));
+    a.Recognize({kUserC, kUserD});
+
+    auto firstCommit = PrepareCommit(
+      externalSender,
+      a,
+      CombineProposals({ProposeAddFor(externalSender, 1, c), ProposeAddFor(externalSender, 1, d)}));
+    ASSERT_TRUE(firstCommit.has_value());
+
+    auto recommit = PrepareCommit(externalSender, a, CombineProposals({}));
+    ASSERT_TRUE(recommit.has_value());
+    EXPECT_NE(*recommit, *firstCommit);
+    ExpectAdded(a.session->ProcessCommit(*recommit), {kUserC, kUserD});
+}
+
+TEST_F(MlsSessionTests, SessionCommitSupersededByEmptyAppendIsRetained)
+{
+    ExternalSender externalSender(kTestProtocolVersion, kTestGroupId);
+    TestSession a(kUserA);
+    TestSession b(kUserB);
+    TestSession c(kUserC);
+    for (auto* session : {&a, &b, &c}) {
+        session->InitAndSetExternalSender(externalSender, kTestGroupId);
+    }
+    ASSERT_TRUE(EstablishGroup(externalSender, a, b));
+    a.Recognize({kUserC});
+
+    auto firstCommit = PrepareCommit(externalSender, a, ProposeAddFor(externalSender, 1, c));
+    ASSERT_TRUE(firstCommit.has_value());
+    ASSERT_TRUE(PrepareCommit(externalSender, a, CombineProposals({})).has_value());
+
+    ExpectAdded(a.session->ProcessCommit(*firstCommit), {kUserC});
+}
+
+TEST_F(MlsSessionTests, SessionEmptyAppendWithStaleQueuedAddKeepsQueue)
+{
+    ExternalSender externalSender(kTestProtocolVersion, kTestGroupId);
+    TestSession a(kUserA);
+    TestSession b(kUserB);
+    TestSession x(kUserC);
+    TestSession y(kUserD);
+    for (auto* session : {&a, &b, &x, &y}) {
+        session->InitAndSetExternalSender(externalSender, kTestGroupId);
+    }
+    ASSERT_TRUE(EstablishGroup(externalSender, a, b));
+    a.Recognize({x.userId, y.userId});
+
+    auto proposeAddX = ProposeAddFor(externalSender, 1, x);
+    ASSERT_TRUE(
+      a.session
+        ->ProcessProposals(CombineProposals({proposeAddX, ProposeAddFor(externalSender, 1, y)}))
+        .has_value());
+    a.Forget(x.userId);
+
+    EXPECT_FALSE(a.session->ProcessProposals(CombineProposals({})).has_value());
+    EXPECT_TRUE(a.HasFailureReason("Unexpected user ID in add proposal"));
+
+    auto commit = PrepareCommit(externalSender, a, externalSender.Revoke(proposeAddX));
+    ASSERT_TRUE(commit.has_value());
+    ExpectAdded(a.session->ProcessCommit(*commit), {y.userId});
+}
+
+TEST_F(MlsSessionTests, SessionOwnCommitRejectedAfterDuplicateAndPartialRevoke)
+{
+    ExternalSender externalSender(kTestProtocolVersion, kTestGroupId);
+    TestSession a(kUserA);
+    TestSession b(kUserB);
+    TestSession x(kUserC);
+    TestSession y(kUserD);
+    TestSession z(kUserE);
+    for (auto* session : {&a, &b, &x, &y, &z}) {
+        session->InitAndSetExternalSender(externalSender, kTestGroupId);
+    }
+    ASSERT_TRUE(EstablishGroup(externalSender, a, b));
+    a.Recognize({x.userId, y.userId});
+
+    auto proposeAddX = ProposeAddFor(externalSender, 1, x);
+    ASSERT_TRUE(a.session->ProcessProposals(proposeAddX).has_value());
+    auto proposeAddY = ProposeAddFor(externalSender, 1, y);
+    auto commitXY = PrepareCommit(externalSender, a, proposeAddY);
+    ASSERT_TRUE(commitXY.has_value());
+
+    a.session->ProcessProposals(proposeAddY);
+    a.session->ProcessProposals(
+      externalSender.Revoke(CombineProposals({proposeAddX, ProposeAddFor(externalSender, 1, z)})));
+    a.Forget(x.userId);
+
+    EXPECT_TRUE(std::holds_alternative<failed_t>(a.session->ProcessCommit(*commitXY)));
+    EXPECT_FALSE(IsInRoster(a, x.userId));
 }
 
 TEST_F(MlsSessionTests, SessionCommitRejectsMissingQueuedProposal)
